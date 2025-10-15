@@ -72,6 +72,7 @@
     <plugin name="cordova-plugin-camera" spec="^7.0.0" />
     <plugin name="cordova-plugin-network-information" spec="^3.0.0" />
     <plugin name="cordova-plugin-whitelist" spec="^1.3.5" />
+    <plugin name="cordova-plugin-android-permissions" spec="^1.1.5" />
     
     <!-- Security -->
     <allow-navigation href="https://*/*" />

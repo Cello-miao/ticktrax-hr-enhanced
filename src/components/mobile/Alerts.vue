@@ -24,19 +24,33 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import Card from '../ui/card.vue';
 import { CardContent } from '../ui/card-components.vue';
 import Button from '../ui/button.vue';
+import { apiService } from '../../services/apiService.js';
+import { useToast } from '../ui/toast/use-toast.js';
 
-const alertItems = ref([
-  { id: 1, title: 'Server CPU high', time: '10m ago', severity: 'High' },
-  { id: 2, title: 'Approval pending: Bob', time: '1h ago', severity: 'Medium' }
-]);
+const { toast } = useToast();
+const alertItems = ref([]);
 
-const refresh = () => {
-  alert('Refreshing alerts (demo)');
+const refresh = async () => {
+  try {
+    const res = await apiService.listNotifications({ page: 1, limit: 20 }).catch(() => ({ data: [] }));
+    const arr = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+    alertItems.value = arr.map((n) => ({
+      id: n.id,
+      title: n.title || n.message || 'Notification',
+      time: n.created_at || n.time || '',
+      severity: (n.severity || n.level || 'Info').toString()
+    }));
+  } catch (e) {
+    console.warn('[Alerts] refresh failed', e);
+    toast.error('Failed to load alerts');
+  }
 };
+
+onMounted(() => { refresh(); });
 </script>
 
 <style scoped>

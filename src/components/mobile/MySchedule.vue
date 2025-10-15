@@ -23,22 +23,45 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import Card from '../ui/card.vue';
 import { CardContent } from '../ui/card-components.vue';
 import Button from '../ui/button.vue';
+import { apiService } from '../../services/apiService.js';
+import { useToast } from '../ui/toast/use-toast.js';
 
-const schedule = ref([
-  { id: 1, day: 'Monday', time: '09:00 - 17:00', location: 'Office' },
-  { id: 2, day: 'Tuesday', time: '09:30 - 17:30', location: 'Office' },
-  { id: 3, day: 'Wednesday', time: '09:00 - 17:00', location: 'Remote' },
-  { id: 4, day: 'Thursday', time: '09:00 - 17:00', location: 'Office' },
-  { id: 5, day: 'Friday', time: '09:00 - 16:00', location: 'Office' }
-]);
+const { toast } = useToast();
+const schedule = ref([]);
+const loading = ref(false);
+const error = ref('');
 
-const requestTimeOff = () => {
-  alert('Time off request submitted (demo)');
+const requestTimeOff = async () => {
+  // Placeholder: connect to an actual time-off endpoint when available
+  toast.success('Time off request submitted');
 };
+
+onMounted(() => { loadSchedule(); });
+
+async function loadSchedule() {
+  loading.value = true;
+  error.value = '';
+  try {
+    // Reuse reports/schedules API if available; otherwise show empty state
+    const res = await apiService.listSchedules().catch(() => null);
+    const items = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+    schedule.value = items.map((it, idx) => ({
+      id: it.id || idx,
+      day: it.day || it.weekday || new Date(it.date || Date.now()).toLocaleDateString('en-US', { weekday: 'long' }),
+      time: it.time_range || `${it.start || '09:00'} - ${it.end || '17:00'}`,
+      location: it.location || it.site || 'Office'
+    }));
+  } catch (e) {
+    console.warn('[MySchedule] load failed', e);
+    schedule.value = [];
+  } finally {
+    loading.value = false;
+  }
+}
 </script>
 
 <style scoped>

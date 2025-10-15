@@ -41,36 +41,52 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
-import { onMounted } from 'vue';
+import { ref, onMounted } from 'vue';
 import Card from '../ui/card.vue';
 import { CardContent } from '../ui/card-components.vue';
 import Button from '../ui/button.vue';
+import { apiService } from '../../services/apiService.js';
+import { useToast } from '../ui/toast/use-toast.js';
 
-const teamHours = ref('320');
-const onDuty = ref(5);
+const { toast } = useToast();
+const teamHours = ref('0');
+const onDuty = ref(0);
 
-const members = ref([
-  { id: 1, name: 'Alice Johnson', role: 'Employee', initials: 'AJ' },
-  { id: 2, name: 'Bob Smith', role: 'Employee', initials: 'BS' },
-  { id: 3, name: 'Carol Lee', role: 'Manager', initials: 'CL' }
-]);
+const members = ref([]);
 
-const viewProfile = (m) => {
-  alert(`Viewing profile for ${m.name} (demo)`);
-};
+const viewProfile = (m) => { toast.info(`Viewing ${m.name}`); };
 
-const message = (m) => {
-  alert(`Opening chat with ${m.name} (demo)`);
-};
+const message = (m) => { toast.info(`Chat with ${m.name}`); };
 
-const refresh = () => {
-  alert('Refreshing team data (demo)');
-};
+const refresh = () => { loadTeam(); };
 
-onMounted(() => {
-  console.debug('[TeamOverview] mounted');
-});
+onMounted(() => { loadTeam(); });
+
+async function loadTeam() {
+  try {
+    const users = await apiService.getTeamMembers().catch(() => ({ data: [] }));
+    const arr = Array.isArray(users?.data) ? users.data : (Array.isArray(users) ? users : []);
+    members.value = arr.map(u => ({
+      id: u.id,
+      name: u.name || `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email,
+      role: u.role || 'Employee',
+      initials: (u.first_name?.[0] || u.name?.[0] || 'U').toUpperCase() + (u.last_name?.[0] || '')
+    }));
+    const analytics = await apiService.getAnalyticsOverview().catch(() => ({}));
+    const hours = Number(
+      analytics?.team_hours ||
+      analytics?.metrics?.team_hours || 0
+    );
+    const duty = Number(
+      analytics?.on_duty ||
+      analytics?.metrics?.on_duty || 0
+    );
+    teamHours.value = hours.toString();
+    onDuty.value = duty;
+  } catch (e) {
+    console.warn('[TeamOverview] load failed', e);
+  }
+}
 </script>
 
 <style scoped>

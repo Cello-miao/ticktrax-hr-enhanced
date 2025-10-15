@@ -60,7 +60,7 @@
       </Button>
 
       <!-- Secondary Actions -->
-      <div class="grid grid-cols-2 gap-3">
+      <!-- <div class="grid grid-cols-2 gap-3">
         <Button
           variant="outline"
           class="h-12 gap-2"
@@ -79,7 +79,7 @@
           <FileText class="h-4 w-4" />
           Timesheet
         </Button>
-      </div>
+      </div> -->
     </div>
 
     <!-- Quick Stats -->
@@ -144,6 +144,11 @@
           <Badge v-if="locationVerified" variant="success" class="text-xs">
             Verified
           </Badge>
+          <div class="ml-auto">
+            <Button size="sm" variant="outline" @click="getCurrentLocation" :disabled="isLoading">
+              Refresh
+            </Button>
+          </div>
         </div>
         <div class="text-sm text-muted-foreground">
           {{ currentLocation || 'Getting location...' }}
@@ -154,7 +159,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import Card from '../ui/card.vue';
 import { CardContent } from '../ui/card-components.vue';
 import Button from '../ui/button.vue';
@@ -163,6 +168,8 @@ import {
   Clock, Play, Square, Coffee, FileText, History, 
   MapPin, Loader2 
 } from 'lucide-vue-next';
+import { apiService } from '../../services/apiService.js';
+import cordovaIntegration from '../../services/cordovaIntegration.js';
 
 const props = defineProps({
   clockedIn: { type: Boolean, default: false },
@@ -185,15 +192,17 @@ const currentDate = ref('');
 const isLoading = ref(false);
 const currentLocation = ref('');
 const locationVerified = ref(false);
+// Persist numeric coordinates for API payloads
+const latitude = ref(null);
+const longitude = ref(null);
 
-const recentActivity = ref([
-  { id: 1, type: 'out', date: 'Yesterday', time: '17:30' },
-  { id: 2, type: 'in', date: 'Yesterday', time: '09:00' },
-  { id: 3, type: 'out', date: 'Oct 5', time: '17:45' },
-  { id: 4, type: 'in', date: 'Oct 5', time: '08:55' },
-]);
+const recentActivity = ref([]);
+const activityLoading = ref(false);
+const activityError = ref('');
 
 let timeInterval;
+let activityInterval;
+let locationWatchId = null;
 
 onMounted(() => {
   updateTime();
@@ -201,12 +210,41 @@ onMounted(() => {
   
   if (props.locationEnabled) {
     getCurrentLocation();
+    // Start a background watch to keep last-known coordinates fresh
+    if (navigator?.geolocation && typeof navigator.geolocation.watchPosition === 'function') {
+      locationWatchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const { latitude: lat, longitude: lng } = pos.coords || {};
+          if (typeof lat === 'number' && typeof lng === 'number') {
+            latitude.value = lat;
+            longitude.value = lng;
+            currentLocation.value = `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`;
+            locationVerified.value = true;
+          }
+        },
+        (err) => {
+          console.warn('Location watch error:', err);
+        },
+        { enableHighAccuracy: true, maximumAge: 5000 }
+      );
+    }
   }
+
+  // Load real recent activity from API and refresh periodically
+  loadRecentActivity();
+  activityInterval = setInterval(loadRecentActivity, 60_000); // refresh every minute
 });
 
 onUnmounted(() => {
   if (timeInterval) {
     clearInterval(timeInterval);
+  }
+  if (activityInterval) {
+    clearInterval(activityInterval);
+  }
+  if (locationWatchId && navigator?.geolocation?.clearWatch) {
+    try { navigator.geolocation.clearWatch(locationWatchId); } catch (_) {}
+    locationWatchId = null;
   }
 });
 
@@ -227,24 +265,83 @@ const updateTime = () => {
 };
 
 const getCurrentLocation = async () => {
-  if (!navigator.geolocation) return;
-  
   try {
+    // Ensure Cordova is ready when applicable
+    try { await cordovaIntegration.waitUntilReady(6000); } catch (_) {}
+
+    // Prefer Cordova geolocation if available
+    const hasCordovaGeo = typeof navigator !== 'undefined' && navigator.geolocation && window.cordova;
     const position = await new Promise((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(resolve, reject, {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 300000 // 5 minutes
-      });
+      const opts = { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 };
+      if (hasCordovaGeo) {
+        navigator.geolocation.getCurrentPosition(resolve, reject, opts);
+      } else if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(resolve, reject, opts);
+      } else {
+        reject(new Error('Geolocation not available'));
+      }
     });
-    
-    // Here you would reverse geocode the coordinates
-    currentLocation.value = `Lat: ${position.coords.latitude.toFixed(4)}, Lng: ${position.coords.longitude.toFixed(4)}`;
-    locationVerified.value = true;
+
+    const { latitude: lat, longitude: lng } = position.coords || {};
+    if (typeof lat === 'number' && typeof lng === 'number') {
+      // Persist numeric coordinates for API usage
+      latitude.value = lat;
+      longitude.value = lng;
+      currentLocation.value = `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`;
+      locationVerified.value = true;
+    } else {
+      currentLocation.value = 'Location unavailable';
+      locationVerified.value = false;
+    }
   } catch (error) {
-    currentLocation.value = 'Location unavailable';
+    // Retry once quickly if the first attempt failed and Cordova just became ready
+    try {
+      await new Promise(r => setTimeout(r, 300));
+      const secondTry = await cordovaIntegration.getCurrentLocation();
+      if (secondTry && typeof secondTry.latitude === 'number' && typeof secondTry.longitude === 'number') {
+        latitude.value = secondTry.latitude;
+        longitude.value = secondTry.longitude;
+        currentLocation.value = `Lat: ${secondTry.latitude.toFixed(4)}, Lng: ${secondTry.longitude.toFixed(4)}`;
+        locationVerified.value = true;
+        return;
+      }
+    } catch (_) {}
+
+    // Fallback to last known position if available
+    const last = cordovaIntegration?.currentPosition;
+    if (last && typeof last.latitude === 'number' && typeof last.longitude === 'number') {
+      latitude.value = last.latitude;
+      longitude.value = last.longitude;
+      currentLocation.value = `Lat: ${last.latitude.toFixed(4)}, Lng: ${last.longitude.toFixed(4)}`;
+      locationVerified.value = true;
+      return;
+    }
+
+    // Friendly error messages by code
+    const code = error && typeof error.code === 'number' ? error.code : null;
+    if (code === 1) {
+      currentLocation.value = 'Location permission denied. Enable permissions and tap Refresh.';
+    } else if (code === 3) {
+      currentLocation.value = 'Location timeout. Ensure GPS is on and tap Refresh.';
+    } else {
+      currentLocation.value = 'Location unavailable. Enable GPS and tap Refresh.';
+    }
     locationVerified.value = false;
   }
+};
+
+// Build payload for clock actions including coordinates when available
+const buildClockPayload = () => {
+  const payload = {};
+  if (typeof latitude.value === 'number' && typeof longitude.value === 'number') {
+    payload.latitude = latitude.value;
+    payload.longitude = longitude.value;
+    payload.gps_verified = true;
+  } else if (props.locationEnabled) {
+    // Inform server that GPS was requested but not available
+    payload.gps_verified = false;
+  }
+  return payload;
 };
 
 const toggleClock = async () => {
@@ -252,15 +349,70 @@ const toggleClock = async () => {
   
   try {
     if (props.clockedIn) {
-      await emit('clock-out');
+      // Start refreshing location in background if needed (don't block clock-out)
+      //if (props.locationEnabled && (!latitude.value || !longitude.value)) {
+      //  getCurrentLocation().catch(() => {});
+      //}
+      // Emit payload with current (possibly last-known) location; parent will call API
+      const payload = buildClockPayload();
+      emit('clock-out', payload);
+      // Optionally refresh activity in the background
+      loadRecentActivity().catch(() => {});
     } else {
-      await emit('clock-in');
+      // Emit clock-in immediately (parent handles API)
+      emit('clock-in');
     }
   } catch (error) {
     console.error('Clock toggle failed:', error);
   } finally {
     isLoading.value = false;
   }
+};
+
+// Real API: Load recent activity from /time-tracking/entries (fallback to /time/entries)
+const loadRecentActivity = async () => {
+  activityLoading.value = true;
+  activityError.value = '';
+  try {
+    // Try to request a small page (API may ignore params; we'll still slice locally)
+    const res = await apiService.getTimeEntries({ page: 1, limit: 10 });
+    const list = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+
+    // Map time entries into in/out events
+    const events = [];
+    for (const entry of list) {
+      const inTs = entry.clock_in || entry.clock_in_time || entry.start_time || entry.started_at;
+      const outTs = entry.clock_out || entry.clock_out_time || entry.end_time || entry.ended_at;
+      if (inTs) {
+        const d = new Date(inTs);
+        events.push({ id: `${entry.id || inTs}-in`, type: 'in', date: formatDateLabel(d), time: formatTime(d), ts: d.getTime() });
+      }
+      if (outTs) {
+        const d = new Date(outTs);
+        events.push({ id: `${entry.id || outTs}-out`, type: 'out', date: formatDateLabel(d), time: formatTime(d), ts: d.getTime() });
+      }
+    }
+
+    // Sort desc by timestamp and keep latest 8 events
+    events.sort((a, b) => b.ts - a.ts);
+    recentActivity.value = events.slice(0, 8);
+  } catch (err) {
+    console.error('Failed to load recent activity:', err);
+    activityError.value = err?.message || 'Failed to load activity';
+  } finally {
+    activityLoading.value = false;
+  }
+};
+
+const formatTime = (d) => d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+const formatDateLabel = (d) => {
+  const today = new Date();
+  const yest = new Date();
+  yest.setDate(today.getDate() - 1);
+  const isSameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  if (isSameDay(d, today)) return 'Today';
+  if (isSameDay(d, yest)) return 'Yesterday';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 </script>
 

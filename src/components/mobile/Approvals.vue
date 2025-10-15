@@ -27,30 +27,76 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import Card from '../ui/card.vue';
 import { CardContent } from '../ui/card-components.vue';
 import Button from '../ui/button.vue';
+import { apiService } from '../../services/apiService.js';
+import { useToast } from '../ui/toast/use-toast.js';
 
-const approvals = ref([
-  { id: 1, title: 'Time adjustment for Oct 3', by: 'Alice', date: '2025-10-03' },
-  { id: 2, title: 'Overtime approval for Sep 28', by: 'Bob', date: '2025-09-28' }
-]);
+const { toast } = useToast();
+const approvals = ref([]);
+const page = ref(1);
+const limit = ref(10);
+const loading = ref(false);
+const hasMore = ref(true);
+
+const mapItem = (it) => ({
+  id: it.id || it.entry_id || it.request_id || Math.random().toString(36).slice(2),
+  title: it.title || it.reason || it.type || 'Approval Request',
+  by: it.by || it.employee_name || it.user?.name || 'Unknown',
+  date: it.date || it.created_at || it.submitted_at || new Date().toISOString().slice(0,10)
+});
+
+async function fetchApprovals(reset = false) {
+  if (loading.value) return;
+  loading.value = true;
+  try {
+    if (reset) { page.value = 1; hasMore.value = true; approvals.value = []; }
+    if (!hasMore.value) return;
+    const res = await apiService.getPendingApprovals({ page: page.value, limit: limit.value });
+    const items = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+    const mapped = items.map(mapItem);
+    approvals.value = approvals.value.concat(mapped);
+    hasMore.value = mapped.length >= limit.value;
+    page.value += 1;
+  } catch (e) {
+    console.error('[Approvals] fetch error', e);
+    toast.error('Failed to load approvals');
+  } finally {
+    loading.value = false;
+  }
+}
 
 const approve = (item) => {
-  // demo action
-  alert(`Approved: ${item.title}`);
-  approvals.value = approvals.value.filter(a => a.id !== item.id);
+  doAction(item, 'approve');
 };
 
 const reject = (item) => {
-  alert(`Rejected: ${item.title}`);
-  approvals.value = approvals.value.filter(a => a.id !== item.id);
+  doAction(item, 'reject');
 };
 
-const loadMore = () => {
-  alert('Loading more approvals (demo)');
-};
+async function doAction(item, action) {
+  try {
+    const id = item.id;
+    if (!id) return;
+    if (action === 'approve') {
+      await apiService.approveTimeEntry(id, {});
+      toast.success('Approved');
+    } else {
+      await apiService.rejectTimeEntry(id, { reason: 'Rejected from mobile' });
+      toast.success('Rejected');
+    }
+    approvals.value = approvals.value.filter(a => a.id !== item.id);
+  } catch (e) {
+    console.error('[Approvals] action error', e);
+    toast.error('Action failed');
+  }
+}
+
+const loadMore = () => fetchApprovals(false);
+
+onMounted(() => { fetchApprovals(true); });
 </script>
 
 <style scoped>

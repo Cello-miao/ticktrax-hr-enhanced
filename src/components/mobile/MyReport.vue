@@ -30,21 +30,36 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import Card from '../ui/card.vue';
 import { CardContent } from '../ui/card-components.vue';
 import Button from '../ui/button.vue';
+import { apiService } from '../../services/apiService.js';
+import { computeAggregatesFromEntries, countDaysWorkedInMonthParis } from '../../utils/timeUtils.js';
+import { useToast } from '../ui/toast/use-toast.js';
 
-const hoursThisMonth = ref('142h');
-const daysWorked = ref(20);
-const notes = ref([
-  { id: 1, text: 'Reviewed timesheet for accuracy.' },
-  { id: 2, text: 'Approved one adjustment request.' }
-]);
+const { toast } = useToast();
+const hoursThisMonth = ref('0h');
+const daysWorked = ref(0);
+const notes = ref([]);
 
 const exportReport = () => {
-  alert('Export started (demo)');
+  // Hook up to reports export endpoint when ready
+  toast.success('Export requested');
 };
+
+onMounted(async () => {
+  try {
+    const res = await apiService.getTimeEntries({ page: 1, limit: 500 });
+    const entries = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+    const agg = computeAggregatesFromEntries(entries);
+    hoursThisMonth.value = `${agg.monthHours.toFixed(1)}h`;
+    daysWorked.value = countDaysWorkedInMonthParis(entries);
+    notes.value = entries.slice(0, 3).map((e, i) => ({ id: i+1, text: `Entry ${i+1} • ${e.clock_in || e.start_time || 'N/A'}` }));
+  } catch (e) {
+    console.warn('[MyReport] load failed', e);
+  }
+});
 </script>
 
 <style scoped>

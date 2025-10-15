@@ -49,6 +49,14 @@ export const API_CONFIG = {
       ENTRY_BY_ID: '/time/entries/:entry_id', // PUT, DELETE - Update/Delete entry
     },
 
+    // New Time Tracking variant endpoints
+    TIME_TRACKING: {
+      STATUS: '/time-tracking/status',      // GET - Current time status (new path)
+      CLOCK_IN: '/time-tracking/clock-in',  // POST - Clock in (new path)
+      CLOCK_OUT: '/time-tracking/clock-out', // POST - Clock out (new path)
+      ENTRIES: '/time-tracking/entries'     // GET - Time entries (new path)
+    },
+
     // ✅ APPROVAL WORKFLOWS (5 endpoints)
     APPROVALS: {
       PENDING: '/approvals/pending',        // GET - Get pending approvals
