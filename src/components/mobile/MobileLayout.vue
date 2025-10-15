@@ -201,7 +201,7 @@ const roleConfig = {
     title: "Admin Portal",
     icon: Shield,
     menuItems: [
-      { icon: Home, label: "Dashboard", id: "dashboard", shortLabel: "Home" },
+      //{ icon: Home, label: "Dashboard", id: "dashboard", shortLabel: "Home" },
       { icon: Users, label: "Employee Management", id: "employees", shortLabel: "Staff" },
       { icon: TrendingUp, label: "Analytics", id: "analytics", shortLabel: "Analytics" },
       { icon: Settings, label: "Settings", id: "settings", shortLabel: "Settings" },

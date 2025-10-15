@@ -1,5 +1,4 @@
 import { API_CONFIG } from '../config/api.js'
-import { getMobileApiConfig, isCordovaApp } from '../config/mobile.js'
 
 /**
  * SIMPLIFIED REAL-TIME SERVICE
