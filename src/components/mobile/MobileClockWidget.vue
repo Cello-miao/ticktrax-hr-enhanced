@@ -136,7 +136,7 @@
     </Card>
 
     <!-- Location Info (if GPS enabled) -->
-    <Card v-if="locationEnabled">
+    <!-- <Card v-if="locationEnabled">
       <CardContent class="p-4">
         <div class="flex items-center gap-2 mb-2">
           <MapPin class="h-4 w-4 text-muted-foreground" />
@@ -148,13 +148,34 @@
             <Button size="sm" variant="outline" @click="getCurrentLocation" :disabled="isLoading">
               Refresh
             </Button>
+            <Button 
+              v-if="locationPermission === 'denied'"
+              size="sm"
+              variant="secondary"
+              class="ml-2"
+              @click="ensureGeoPermission"
+            >
+              Grant Permission
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              class="ml-2"
+              @click="openGpsSettings"
+            >
+              GPS Settings
+            </Button>
           </div>
         </div>
         <div class="text-sm text-muted-foreground">
           {{ currentLocation || 'Getting location...' }}
         </div>
+        <div class="mt-2 text-[11px] text-muted-foreground">
+          <div>Permission: <strong>{{ locationPermission }}</strong></div>
+          <div>GPS Enabled: <strong>{{ gpsEnabled ? 'yes' : 'no' }}</strong></div>
+        </div>
       </CardContent>
-    </Card>
+    </Card> -->
   </div>
 </template>
 
@@ -193,6 +214,8 @@ const currentDate = ref('');
 const isLoading = ref(false);
 const currentLocation = ref('');
 const locationVerified = ref(false);
+const locationPermission = ref('unknown'); // 'unknown' | 'granted' | 'denied'
+const gpsEnabled = ref(true);
 // Persist numeric coordinates for API payloads
 const latitude = ref(null);
 const longitude = ref(null);
@@ -221,7 +244,21 @@ onMounted(() => {
   statusInterval = setInterval(() => fetchTimeStatus().catch(() => {}), 60_000);
   
   if (props.locationEnabled) {
-    getCurrentLocation();
+    // Request runtime permission when available, then attempt location
+    ensureGeoPermission().then(() => {
+      getCurrentLocation();
+    }).catch(() => {
+      // Even if permission flow failed, still try so user gets a clear error
+      getCurrentLocation();
+    });
+    // Also check GPS enabled status (non-blocking)
+    cordovaIntegration.isLocationEnabled().then((v) => { gpsEnabled.value = !!v; }).catch(() => {});
+    // Auto-retry once after a short delay if we still don't have a fix
+    setTimeout(() => {
+      if (!latitude.value || !longitude.value) {
+        getCurrentLocation().catch(() => {});
+      }
+    }, 2500);
     // Start a background watch to keep last-known coordinates fresh
     if (navigator?.geolocation && typeof navigator.geolocation.watchPosition === 'function') {
       locationWatchId = navigator.geolocation.watchPosition(
@@ -279,30 +316,33 @@ const updateTime = () => {
   });
 };
 
+const openGpsSettings = () => {
+  try { cordovaIntegration.openLocationSettings(); } catch (_) {}
+};
+
+const ensureGeoPermission = async () => {
+  try {
+    const granted = await cordovaIntegration.requestLocationPermission();
+    locationPermission.value = granted ? 'granted' : 'denied';
+    return granted;
+  } catch (_) {
+    locationPermission.value = 'unknown';
+    return false;
+  }
+};
+
 const getCurrentLocation = async () => {
   try {
-    // Ensure Cordova is ready when applicable
+    // Ensure Cordova ready and permissions
     try { await cordovaIntegration.waitUntilReady(6000); } catch (_) {}
+    await ensureGeoPermission();
 
-    // Prefer Cordova geolocation if available
-    const hasCordovaGeo = typeof navigator !== 'undefined' && navigator.geolocation && window.cordova;
-    const position = await new Promise((resolve, reject) => {
-      const opts = { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 };
-      if (hasCordovaGeo) {
-        navigator.geolocation.getCurrentPosition(resolve, reject, opts);
-      } else if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(resolve, reject, opts);
-      } else {
-        reject(new Error('Geolocation not available'));
-      }
-    });
-
-    const { latitude: lat, longitude: lng } = position.coords || {};
-    if (typeof lat === 'number' && typeof lng === 'number') {
-      // Persist numeric coordinates for API usage
-      latitude.value = lat;
-      longitude.value = lng;
-      currentLocation.value = `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`;
+    // Use best-effort helper which tries high/low accuracy and last-known
+    const loc = await cordovaIntegration.getBestEffortLocation();
+    if (loc && typeof loc.latitude === 'number' && typeof loc.longitude === 'number') {
+      latitude.value = loc.latitude;
+      longitude.value = loc.longitude;
+      currentLocation.value = `Lat: ${loc.latitude.toFixed(4)}, Lng: ${loc.longitude.toFixed(4)}`;
       locationVerified.value = true;
     } else {
       currentLocation.value = 'Location unavailable';
@@ -335,7 +375,8 @@ const getCurrentLocation = async () => {
     // Friendly error messages by code
     const code = error && typeof error.code === 'number' ? error.code : null;
     if (code === 1) {
-      currentLocation.value = 'Location permission denied. Enable permissions and tap Refresh.';
+      locationPermission.value = 'denied';
+      currentLocation.value = 'Location permission denied. Tap Grant Permission and then Refresh.';
     } else if (code === 3) {
       currentLocation.value = 'Location timeout. Ensure GPS is on and tap Refresh.';
     } else {

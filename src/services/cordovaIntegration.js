@@ -144,6 +144,45 @@ class CordovaIntegration {
     }
   }
 
+  // Diagnostics: check if location services are enabled (no side effects)
+  async isLocationEnabled() {
+    try {
+      if (!window.cordova || !window.cordova.plugins || !window.cordova.plugins.diagnostic) return true;
+      const diagnostic = window.cordova.plugins.diagnostic;
+      return await new Promise((resolve) => {
+        diagnostic.isLocationEnabled((res) => resolve(!!res), () => resolve(false));
+      });
+    } catch (_) {
+      return true;
+    }
+  }
+
+  // Diagnostics: check location permission without prompting (Android)
+  async checkLocationPermission() {
+    try {
+      if (!window.cordova || !cordova.plugins || !cordova.plugins.permissions) return true;
+      const permissions = cordova.plugins.permissions;
+      const fine = permissions.ACCESS_FINE_LOCATION;
+      const has = await new Promise((resolve) => {
+        permissions.checkPermission(fine, (status) => resolve(!!status.hasPermission), () => resolve(false));
+      });
+      return !!has;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  // Open device location settings (Android)
+  openLocationSettings() {
+    try {
+      if (window.cordova && window.cordova.plugins && window.cordova.plugins.diagnostic && window.cordova.plugins.diagnostic.switchToLocationSettings) {
+        window.cordova.plugins.diagnostic.switchToLocationSettings();
+      }
+    } catch (_) {
+      // ignore
+    }
+  }
+
   async getCurrentLocation() {
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
