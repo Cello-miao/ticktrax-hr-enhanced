@@ -2,11 +2,11 @@
   <div class="p-3 sm:p-4">
     <div class="flex items-center justify-between mb-4">
       <h2 class="text-lg sm:text-xl font-semibold">Employee Management</h2>
-      <Button @click="refreshEmployees" :disabled="loading" size="sm" variant="outline">
+      <!-- <Button @click="refreshEmployees" :disabled="loading" size="sm" variant="outline">
         <RefreshCw v-if="loading" class="h-4 w-4 animate-spin" />
         <RefreshCw v-else class="h-4 w-4" />
         Refresh
-      </Button>
+      </Button> -->
     </div>
 
     <!-- Loading State -->
@@ -48,26 +48,26 @@
             <div class="text-xs text-muted-foreground mt-1">
               Role: {{ roleName(emp) }}
             </div>
-            <div class="flex items-center gap-2 mt-1">
-              <Badge :variant="emp.active ? 'default' : 'secondary'" class="text-[10px] sm:text-xs">
-                {{ emp.active ? 'Active' : 'Inactive' }}
+            <!-- <div class="flex items-center gap-2 mt-1">
+              <Badge :variant="isActiveToday(emp) ? 'default' : 'secondary'" class="text-[10px] sm:text-xs">
+                {{ isActiveToday(emp) ? 'Active' : 'Inactive' }}
               </Badge>
               <Badge v-if="emp.is_admin" variant="destructive" class="text-[10px] sm:text-xs">
                 Admin
               </Badge>
-            </div>
+            </div> -->
           </div>
         </div>
       </Card>
     </div>
 
     <!-- Add Employee Button -->
-    <div class="mt-6">
+    <!-- <div class="mt-6">
       <Button @click="showAddEmployee = true" class="w-full" :disabled="loading">
         <Plus class="h-4 w-4 mr-2" />
         Add Employee
       </Button>
-    </div>
+    </div> -->
 
     <!-- Add Employee Dialog -->
     <Dialog v-model:open="showAddEmployee">
@@ -198,6 +198,14 @@ const inactiveEmployees = computed(() => employees.value.filter(emp => !emp.acti
 const roleName = (emp) => {
   // Prefer embedded role object
   if (emp?.role?.name) return emp.role.name;
+  // If role is a plain string
+  if (typeof emp?.role === 'string') {
+    const raw = emp.role.trim();
+    const lc = raw.toLowerCase();
+    if (lc === 'hr' || lc === 'human resources') return 'HR';
+    if (lc === 'administrator') return 'Admin';
+    return raw.charAt(0).toUpperCase() + raw.slice(1);
+  }
   // Fallback: some APIs return role_name directly
   if (emp?.role_name) return emp.role_name;
   // Fallback: lookup by role_id from loaded roles
@@ -212,6 +220,24 @@ const roleName = (emp) => {
     if (first?.name) return first.name;
   }
   return 'No role assigned';
+};
+
+// Track users who clocked in today
+const activeTodaySet = ref(new Set());
+
+// Normalize and extract a user id from an employee object
+const getEmpId = (emp) => {
+  const id = emp?.id ?? emp?.user_id ?? emp?.userId ?? emp?.userID ?? emp?.user?.id ?? null;
+  if (id == null) return null;
+  // use string for stable Set membership
+  return String(id);
+};
+
+// Compute whether the given employee has clocked in today
+const isActiveToday = (emp) => {
+  const id = getEmpId(emp);
+  if (id == null) return false;
+  return activeTodaySet.value.has(id);
 };
 
 // Load employees from API
@@ -253,7 +279,7 @@ const loadRoles = async () => {
 
 // Refresh employees
 const refreshEmployees = () => {
-  loadEmployees();
+  Promise.all([loadEmployees(), loadActiveToday()]).catch(() => {});
 };
 
 // Removed: profile view, activate/deactivate, and delete actions for mobile UI simplification
@@ -306,12 +332,42 @@ const addEmployee = async () => {
   }
 };
 
+// Load set of users who clocked in today
+const loadActiveToday = async () => {
+  try {
+    // Request entries for today's date range; any returned entry counts as active
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const startDate = startOfDay.toISOString().split('T')[0];
+    const endDate = endOfDay.toISOString().split('T')[0];
+
+    const res = await apiService.getTimeEntries({ start_date: startDate, end_date: endDate, limit: 5000 });
+    const raw = res?.data || res || [];
+    const entries = Array.isArray(raw) ? raw : (Array.isArray(raw?.entries) ? raw.entries : []);
+
+    const getUserIdFromEntry = (e) => e.user_id ?? e.userId ?? e.userID ?? e.user?.id ?? e.uid ?? null;
+
+    const set = new Set();
+    for (const entry of entries) {
+      const uid = getUserIdFromEntry(entry);
+      if (uid != null) set.add(String(uid));
+    }
+    activeTodaySet.value = set; // replace to trigger reactivity
+  } catch (e) {
+    // Non-fatal; leave set empty on failure
+    console.warn('[EmployeeManagement] Failed to load active-today set:', e);
+    activeTodaySet.value = new Set();
+  }
+};
+
 // Initialize component
 onMounted(async () => {
   console.debug('[EmployeeManagement] mounted');
   await Promise.all([
     loadEmployees(),
-    loadRoles()
+    loadRoles(),
+    loadActiveToday()
   ]);
 });
 </script>

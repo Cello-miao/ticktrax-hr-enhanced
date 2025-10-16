@@ -170,6 +170,15 @@ const setDashboard = () => {
 onMounted(async () => {
   // Check for stored user data first
   const storedUser = localStorage.getItem('user_data');
+  const shouldShowWelcomeToast = () => {
+    try {
+      // If mobile refresh was explicitly triggered (bottom nav or clock), skip welcome toast
+      if (typeof localStorage !== 'undefined' && localStorage.getItem('mobile.refreshTarget')) {
+        return false;
+      }
+    } catch (_) {}
+    return true;
+  };
   if (storedUser) {
     try {
       const userData = JSON.parse(storedUser);
@@ -182,7 +191,9 @@ onMounted(async () => {
       
       console.log('App.vue onMounted - set user.value:', user.value);
       setDashboard();
-      toast.success('Welcome back!');
+      if (shouldShowWelcomeToast()) {
+        toast.success('Welcome back!');
+      }
       return;
     } catch (error) {
       console.log('Failed to parse stored user data:', error);
@@ -202,7 +213,9 @@ onMounted(async () => {
           role: userData.role
         };
         setDashboard();
-        toast.success('Welcome back!');
+        if (shouldShowWelcomeToast()) {
+          toast.success('Welcome back!');
+        }
       }
     } catch (error) {
       console.log('Backend authentication failed:', error);

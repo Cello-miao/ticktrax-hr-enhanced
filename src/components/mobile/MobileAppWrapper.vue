@@ -104,7 +104,7 @@
   <!-- Profile Modal -->
   <Profile 
     v-if="showProfile" 
-    :user="userProfile || { first_name: user.name, role: user.role }" 
+    :user="userProfile || null" 
     @close="handleProfileClose" 
     @logout="handleProfileLogout" 
   />
@@ -211,6 +211,18 @@ onMounted(() => {
   detectMobile();
   setupPWA();
   checkAuthState();
+  // Restore target view after a reload triggered by bottom nav
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('mobile.refreshTarget') : null;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.view === 'string') {
+        currentView.value = parsed.view;
+      }
+      // clear after use
+      localStorage.removeItem('mobile.refreshTarget');
+    }
+  } catch (_) {}
   
   // Listen for orientation changes
   window.addEventListener('orientationchange', detectMobile);
@@ -261,6 +273,19 @@ const checkAuthState = async () => {
         name: `${profile.first_name || profile.firstName || ''} ${profile.last_name || profile.lastName || ''}`.trim(),
         role: profile.role || 'employee'
       };
+      // If no explicit refresh target set this session and currentView is still the default,
+      // prefer showing Employees for admin users; otherwise keep existing behavior.
+      try {
+        const hasRefreshTarget = typeof localStorage !== 'undefined' && localStorage.getItem('mobile.refreshTarget');
+        const roleLc = String(user.value.role || '').toLowerCase();
+        if (!hasRefreshTarget && (!currentView.value || currentView.value === 'dashboard')) {
+          if (roleLc === 'admin' || roleLc === 'hr' || roleLc === 'human resources') {
+            currentView.value = 'employees';
+          } else if (isMobile.value) {
+            currentView.value = 'clock';
+          }
+        }
+      } catch (_) {}
       // Ensure data like clockedIn/status/hours are loaded when session exists
       try {
         await loadMobileData();
@@ -274,8 +299,19 @@ const checkAuthState = async () => {
 const handleLogin = async (userName, role) => {
   console.log('📱 Mobile: Login successful', userName, role);
   user.value = { name: userName, role };
-  currentView.value = isMobile.value ? 'clock' : 'dashboard';
-  toast.success(`Welcome back, ${userName}!`);
+  // Default landing per role: admins go to Employees; others keep clock on mobile, dashboard on desktop
+  const roleLc = String(role || '').toLowerCase();
+  if (roleLc === 'admin' || roleLc === 'hr' || roleLc === 'human resources') {
+    currentView.value = 'employees';
+  } else {
+    currentView.value = isMobile.value ? 'clock' : 'dashboard';
+  }
+  try {
+    const hasRefreshTarget = typeof localStorage !== 'undefined' && localStorage.getItem('mobile.refreshTarget');
+    if (!hasRefreshTarget) {
+      toast.success(`Welcome back, ${userName}!`);
+    }
+  } catch (_) {}
   
   // Load initial data
   await loadMobileData();

@@ -59,10 +59,10 @@
             <div class="font-medium">{{ profile?.username || '—' }}</div>
           </div>
 
-          <div>
+          <!-- <div>
             <div class="text-sm text-muted-foreground">Role</div>
-            <div class="font-medium">{{ profile?.role?.name || profile?.role || 'Employee' }}</div>
-          </div>
+            <div class="font-medium">{{ roleLabel }}</div>
+          </div> -->
 
           <div v-if="profile?.phone">
             <div class="text-sm text-muted-foreground">Phone</div>
@@ -86,7 +86,7 @@
         </div>
 
         <!-- Stats Cards -->
-        <div v-if="dashboard" class="grid grid-cols-2 gap-3 mt-4">
+        <!-- <div v-if="dashboard" class="grid grid-cols-2 gap-3 mt-4">
           <Card class="p-3">
             <div class="text-center">
               <div class="text-lg font-bold text-blue-600">{{ dashboard.total_hours || 0 }}</div>
@@ -99,10 +99,10 @@
               <div class="text-xs text-muted-foreground">Currently In</div>
             </div>
           </Card>
-        </div>
+        </div> -->
 
         <!-- Action Buttons -->
-        <div class="mt-6 space-y-2">
+        <!-- <div class="mt-6 space-y-2">
           <Button 
             @click="showEditProfile = true" 
             class="w-full" 
@@ -121,7 +121,7 @@
             <Key class="h-4 w-4 mr-2" />
             Change Password
           </Button>
-        </div>
+        </div> -->
 
         <!-- Bottom Actions -->
         <div class="mt-4 flex gap-2">
@@ -253,7 +253,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, watch, computed } from 'vue';
 import Button from '../ui/button.vue';
 import Card from '../ui/card.vue';
 import Input from '../ui/input.vue';
@@ -275,6 +275,7 @@ const loading = ref(false);
 const error = ref('');
 const updating = ref(false);
 const changingPassword = ref(false);
+const roles = ref([]);
 
 // Dialog states
 const showEditProfile = ref(false);
@@ -345,6 +346,65 @@ const loadDashboard = async () => {
     // Don't show error for dashboard as it's not critical
   }
 };
+
+// Load roles for lookup (used when only role_id is present)
+const loadRoles = async () => {
+  try {
+    const response = await apiService.listRoles();
+    const roleData = response?.data || response || [];
+    roles.value = Array.isArray(roleData) ? roleData : [];
+  } catch (err) {
+    // non-critical; ignore
+    roles.value = [];
+  }
+};
+
+// Helpers for role display
+const toTitle = (s) => {
+  if (!s || typeof s !== 'string') return '';
+  return s.charAt(0).toUpperCase() + s.slice(1);
+};
+
+const resolveRoleName = (p) => {
+  if (!p) return 'Employee';
+  // embedded object
+  if (p.role && typeof p.role === 'object' && p.role.name) return p.role.name;
+  // plain string role
+  if (typeof p.role === 'string') {
+    const raw = p.role.trim();
+    const lc = raw.toLowerCase();
+    if (lc === 'hr' || lc === 'human resources') return 'HR';
+    if (lc === 'admin' || lc === 'administrator') return 'Admin';
+    return toTitle(raw);
+  }
+  // role_name field
+  if (p.role_name) {
+    const raw = String(p.role_name);
+    const lc = raw.toLowerCase();
+    if (lc === 'hr' || lc === 'human resources') return 'HR';
+    if (lc === 'admin' || lc === 'administrator') return 'Admin';
+    return toTitle(raw);
+  }
+  // role_id lookup if roles loaded
+  if (p.role_id && Array.isArray(roles.value)) {
+    const found = roles.value.find(r => r.id === p.role_id || String(r.id) === String(p.role_id));
+    if (found?.name) return found.name;
+  }
+  // roles array on profile
+  if (Array.isArray(p.roles) && p.roles.length > 0) {
+    const first = p.roles[0];
+    if (typeof first === 'string') {
+      const lc = first.toLowerCase();
+      if (lc === 'hr' || lc === 'human resources') return 'HR';
+      if (lc === 'admin' || lc === 'administrator') return 'Admin';
+      return toTitle(first);
+    }
+    if (first?.name) return first.name;
+  }
+  return 'Employee';
+};
+
+const roleLabel = computed(() => resolveRoleName(profile.value));
 
 // Update user profile
 const updateProfile = async () => {
@@ -441,16 +501,15 @@ watch(() => props.user, (newUser) => {
 onMounted(async () => {
   console.debug('[Profile] mounted');
   
-  // If user prop is provided, use it; otherwise load from API
+  // Seed with provided user (may be partial), then always fetch fresh profile + dashboard
   if (props.user) {
     profile.value = props.user;
-    await loadDashboard();
-  } else {
-    await Promise.all([
-      loadProfile(),
-      loadDashboard()
-    ]);
   }
+  await Promise.all([
+    loadProfile(),
+    loadDashboard(),
+    loadRoles()
+  ]);
 });
 </script>
 

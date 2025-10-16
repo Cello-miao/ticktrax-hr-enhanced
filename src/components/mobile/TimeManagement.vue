@@ -9,10 +9,10 @@
             <div class="text-3xl font-bold">{{ totalHours }}</div>
             <div class="text-sm text-muted-foreground">Hours This Week</div>
           </div>
-          <div>
+          <!-- <div>
             <div class="text-3xl font-bold">{{ overtimeHours }}</div>
             <div class="text-sm text-muted-foreground">Overtime</div>
-          </div>
+          </div> -->
         </div>
       </CardContent>
     </Card>

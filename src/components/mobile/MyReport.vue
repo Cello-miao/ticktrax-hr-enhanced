@@ -16,16 +16,16 @@
           </div>
         </div>
 
-        <h4 class="font-medium mb-2">Recent Notes</h4>
+        <!-- <h4 class="font-medium mb-2">Recent Notes</h4>
         <ul class="space-y-2 text-sm text-muted-foreground">
           <li v-for="note in notes" :key="note.id">{{ note.text }}</li>
-        </ul>
+        </ul> -->
       </CardContent>
     </Card>
 
-    <div class="text-center mt-6">
+    <!-- <div class="text-center mt-6">
       <Button @click="exportReport">Export PDF</Button>
-    </div>
+    </div> -->
   </div>
 </template>
 
@@ -55,11 +55,62 @@ onMounted(async () => {
     const agg = computeAggregatesFromEntries(entries);
     hoursThisMonth.value = `${agg.monthHours.toFixed(1)}h`;
     daysWorked.value = countDaysWorkedInMonthParis(entries);
-    notes.value = entries.slice(0, 3).map((e, i) => ({ id: i+1, text: `Entry ${i+1} • ${e.clock_in || e.start_time || 'N/A'}` }));
+    // Build recent notes from the latest entries (most recent first)
+    const withTs = entries.map((e) => ({ e, ts: mostRecentTs(e) }))
+      .filter(({ ts }) => Number.isFinite(ts));
+    withTs.sort((a, b) => b.ts - a.ts);
+    notes.value = withTs.slice(0, 3).map(({ e }, i) => ({
+      id: e.id || i + 1,
+      text: formatRecentEntry(e)
+    }));
   } catch (e) {
     console.warn('[MyReport] load failed', e);
   }
 });
+
+function mostRecentTs(e) {
+  const fields = [
+    e.clock_out, e.clock_out_time, e.end_time, e.ended_at,
+    e.clock_in, e.clock_in_time, e.start_time, e.started_at,
+    e.updated_at, e.created_at
+  ];
+  let max = NaN;
+  for (const f of fields) {
+    if (!f) continue;
+    const d = new Date(f);
+    const t = d.getTime();
+    if (Number.isFinite(t)) max = Math.max(Number.isFinite(max) ? max : t, t);
+  }
+  return max;
+}
+
+function formatRecentEntry(e) {
+  // If server provided notes text, use it directly
+  if (e.notes && typeof e.notes === 'string') return e.notes;
+  const start = e.clock_in || e.clock_in_time || e.start_time || e.started_at;
+  const end = e.clock_out || e.clock_out_time || e.end_time || e.ended_at;
+  const datePart = formatDateLabel(new Date(end || start || Date.now()));
+  const range = formatTimeRangeText(start, end);
+  return `${datePart} • ${range}`;
+}
+
+function formatTimeRangeText(start, end) {
+  const tfmt = (val) => {
+    if (!val) return null;
+    const d = new Date(val);
+    if (Number.isFinite(d.getTime())) {
+      return d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+    }
+    if (typeof val === 'string') return val; // already looks like HH:mm
+    return null;
+  };
+  const s = tfmt(start);
+  const e = tfmt(end);
+  if (s && e) return `${s} — ${e}`;
+  if (s) return `In ${s}`;
+  if (e) return `Out ${e}`;
+  return 'No time recorded';
+}
 </script>
 
 <style scoped>

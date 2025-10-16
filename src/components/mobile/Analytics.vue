@@ -2,11 +2,11 @@
   <div class="p-4">
     <div class="flex items-center justify-between mb-4">
       <h2 class="text-xl font-semibold">Analytics</h2>
-      <Button @click="refreshAnalytics" :disabled="loading" size="sm" variant="outline">
+      <!-- <Button @click="refreshAnalytics" :disabled="loading" size="sm" variant="outline">
         <RefreshCw v-if="loading" class="h-4 w-4 animate-spin" />
         <RefreshCw v-else class="h-4 w-4" />
         Refresh
-      </Button>
+      </Button> -->
     </div>
 
     <!-- Loading State -->
@@ -30,33 +30,33 @@
 
     <!-- Analytics Content -->
     <div v-else class="space-y-4">
-      <!-- Overview Stats -->
+      <!-- Overview Stats: only two numbers required -->
       <div class="grid grid-cols-2 gap-4">
         <Card class="p-4">
           <div class="flex items-center gap-2">
             <Users class="h-5 w-5 text-blue-500" />
-            <h3 class="font-medium">Active Users Today</h3>
+            <h3 class="font-medium">Total Employees</h3>
           </div>
           <div class="mt-2 text-2xl font-bold text-blue-600">
-            {{ overview?.active_users || 0 }}
+            {{ overview?.total_employees || 0 }}
           </div>
-          <div class="text-xs text-muted-foreground">Users who clocked in today</div>
+          <div class="text-xs text-muted-foreground">All employees</div>
         </Card>
 
         <Card class="p-4">
           <div class="flex items-center gap-2">
             <Clock class="h-5 w-5 text-green-500" />
-            <h3 class="font-medium">Hours Today</h3>
+            <h3 class="font-medium">Clocked In Today</h3>
           </div>
           <div class="mt-2 text-2xl font-bold text-green-600">
-            {{ formatHours(overview?.hours_today || 0) }}
+            {{ overview?.clocked_in_today || 0 }}
           </div>
-          <div class="text-xs text-muted-foreground">Total logged</div>
+          <div class="text-xs text-muted-foreground">clock-in today</div>
         </Card>
       </div>
 
       <!-- Productivity Metrics -->
-      <Card class="p-4">
+      <!-- <Card class="p-4">
         <div class="flex items-center justify-between mb-4">
           <h3 class="font-medium flex items-center gap-2">
             <TrendingUp class="h-4 w-4" />
@@ -83,12 +83,9 @@
             <div class="text-sm text-muted-foreground">Average Hours</div>
             <div class="text-lg font-semibold">{{ formatHours(productivity.average_hours || 0) }}</div>
           </div>
-          <!-- <div>
-            <div class="text-sm text-muted-foreground">Efficiency</div>
-            <div class="text-lg font-semibold">{{ Math.round(productivity.efficiency || 0) }}%</div>
-          </div> -->
+          
         </div>
-      </Card>
+      </Card> -->
 
       <!-- Team Performance -->
       <!-- <Card class="p-4">
@@ -147,7 +144,7 @@
       </Card> -->
 
       <!-- Overtime Analytics -->
-      <Card class="p-4">
+      <!-- <Card class="p-4">
         <h3 class="font-medium flex items-center gap-2 mb-4">
           <Clock class="h-4 w-4" />
           Overtime Analytics
@@ -167,7 +164,7 @@
             <div class="text-lg font-semibold">{{ Math.round(overtime.overtime_rate || 0) }}%</div>
           </div>
         </div>
-      </Card>
+      </Card> -->
     </div>
   </div>
 </template>
@@ -225,16 +222,17 @@ const formatDate = (date) => {
 const loadOverview = async () => {
   try {
     console.debug('[Analytics] Loading overview...');
-    const response = await apiService.getAnalyticsOverview();
-    const analyticsData = response?.data || response || {};
-    
-    // Calculate today's active users from time tracking entries
-    const todayActiveUsers = await calculateTodayActiveUsers();
-    
+    // Total employees
+    const usersRes = await apiService.listUsers();
+    const usersArr = Array.isArray(usersRes?.data) ? usersRes.data : (Array.isArray(usersRes) ? usersRes : []);
+    const totalEmployees = usersArr.length;
+
+    // Today stats (we only need how many clocked in today)
+    const { clockedInTodayCount } = await calculateTodayStats();
+
     overview.value = {
-      ...analyticsData,
-      active_users: todayActiveUsers,
-      hours_today: analyticsData.hours_today || 0
+      total_employees: totalEmployees,
+      clocked_in_today: clockedInTodayCount
     };
     
     console.debug('[Analytics] Overview loaded:', overview.value);
@@ -244,56 +242,79 @@ const loadOverview = async () => {
   }
 };
 
-// Calculate today's active users from time tracking entries
-const calculateTodayActiveUsers = async () => {
+// Calculate today's stats; we derive clocked-in-today count here
+const calculateTodayStats = async () => {
   try {
-    console.debug('[Analytics] Calculating today\'s active users...');
-    
-    // Get today's date range
-    const today = new Date();
-    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
-    
-    // Format dates for API
+    console.debug('[Analytics] Calculating today\'s stats (active users + avg hours)...');
+
+    // Compute local-day range [startOfDay, startOfNextDay)
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+
+    // Format YYYY-MM-DD for API
     const startDate = startOfDay.toISOString().split('T')[0];
     const endDate = endOfDay.toISOString().split('T')[0];
-    
-    console.debug('[Analytics] Fetching time entries for:', startDate, 'to', endDate);
-    
-    // Fetch time tracking entries for today
+
+    console.debug('[Analytics] Fetching /time-tracking/entries with params:', { start_date: startDate, end_date: endDate });
+
+    // Fetch entries strictly within today (backend interprets [start_date, end_date))
     const response = await apiService.getTimeEntries({
       start_date: startDate,
-      end_date: endDate
+      end_date: endDate,
+      limit: 2000
     });
-    
-    const entries = response?.data || response || [];
-    const entriesArray = Array.isArray(entries) ? entries : [];
-    
-    console.debug('[Analytics] Found', entriesArray.length, 'time entries for today');
-    
-    // Count unique users who have clocked in today
-    const uniqueUsers = new Set();
-    
-    entriesArray.forEach(entry => {
-      // Check if entry has clock_in data and is from today
-      const clockInTime = entry.clock_in || entry.clock_in_time || entry.start_time || entry.started_at;
-      if (clockInTime) {
-        const clockInDate = new Date(clockInTime);
-        const isToday = clockInDate >= startOfDay && clockInDate < endOfDay;
-        
-        if (isToday && entry.user_id) {
-          uniqueUsers.add(entry.user_id);
-        }
+
+    const entriesRaw = response?.data || response || [];
+    const entries = Array.isArray(entriesRaw) ? entriesRaw : (Array.isArray(entriesRaw?.entries) ? entriesRaw.entries : []);
+
+    console.debug('[Analytics] Entries fetched for today:', entries.length);
+
+    // Helper to extract a consistent user id
+    const getUserId = (e) => e.user_id || e.userId || e.userID || e.user?.id || e.uid || null;
+    const getClockInTs = (e) => e.clock_in || e.clock_in_time || e.clockIn || e.start_time || e.started_at || e.startedAt || null;
+    const getClockOutTs = (e) => e.clock_out || e.clock_out_time || e.clockOut || e.end_time || e.ended_at || e.endedAt || null;
+
+    const uniqueUsers = new Set(); // users with any overlap today
+    const minutesByUser = new Map(); // total overlapped minutes per user
+    const hasClockInToday = new Map(); // uid -> boolean
+    const windowStart = startOfDay.getTime();
+    const windowEnd = Math.min(endOfDay.getTime(), now.getTime());
+
+    for (const entry of entries) {
+      const cin = getClockInTs(entry);
+      if (!cin) continue; // skip malformed entries with no start
+      const cinMs = new Date(cin).getTime();
+      const uid = getUserId(entry);
+      if (uid == null) continue;
+
+      const cout = getClockOutTs(entry);
+      const coutMs = cout ? new Date(cout).getTime() : windowEnd; // ongoing entries end at now (capped by day end)
+
+      // compute overlap within today's window; count as active if any overlap
+      const startMs = Math.max(cinMs, windowStart);
+      const endMs = Math.min(coutMs, windowEnd);
+      const overlapMin = Math.max(0, Math.floor((endMs - startMs) / 60000));
+
+      // mark users who have an actual clock-in timestamp today
+      if (cinMs >= windowStart && cinMs < endOfDay.getTime()) {
+        hasClockInToday.set(uid, true);
       }
-    });
-    
+
+      if (overlapMin > 0) {
+        uniqueUsers.add(uid);
+        minutesByUser.set(uid, (minutesByUser.get(uid) || 0) + overlapMin);
+      }
+    }
+
     const activeUsersCount = uniqueUsers.size;
-    console.debug('[Analytics] Today\'s active users:', activeUsersCount, 'unique users');
-    
-    return activeUsersCount;
+    const clockedInTodayCount = Array.from(hasClockInToday.keys()).length;
+
+    console.debug('[Analytics] Active users today:', activeUsersCount, 'Clocked-in today:', clockedInTodayCount);
+    return { activeUsersCount, clockedInTodayCount };
   } catch (err) {
-    console.error('[Analytics] Error calculating today\'s active users:', err);
-    return 0;
+    console.error('[Analytics] Error calculating today\'s stats:', err);
+    return { activeUsersCount: 0, clockedInTodayCount: 0 };
   }
 };
 
@@ -382,15 +403,8 @@ const loadAnalytics = async () => {
   
   try {
     console.debug('[Analytics] Loading all analytics data...');
-    
-    // Load all analytics in parallel
-    await Promise.all([
-      loadOverview(),
-      loadProductivityMetrics(),
-      loadTeamPerformance(),
-      loadAttendanceAnalytics(),
-      loadOvertimeAnalytics()
-    ]);
+    // Only load the two required numbers
+    await loadOverview();
     
     console.debug('[Analytics] All analytics loaded successfully');
   } catch (err) {

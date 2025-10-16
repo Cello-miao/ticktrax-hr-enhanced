@@ -18,23 +18,23 @@
           <div class="flex items-center justify-center gap-3">
             <div :class="[
               'w-3 h-3 rounded-full',
-              clockedIn ? 'bg-green-500 animate-pulse' : 'bg-gray-400'
+              isClockedIn ? 'bg-green-500 animate-pulse' : 'bg-gray-400'
             ]" />
             <span class="font-medium">
-              {{ clockedIn ? 'Clocked In' : 'Clocked Out' }}
+              {{ isClockedIn ? 'Clocked In' : 'Clocked Out' }}
             </span>
           </div>
 
           <!-- Work Session Info -->
-          <div v-if="clockedIn" class="bg-muted/50 rounded-lg p-4 space-y-2">
+          <!-- <div v-if="isClockedIn" class="bg-muted/50 rounded-lg p-4 space-y-2">
             <div class="text-sm text-muted-foreground">Today's Work Time</div>
             <div class="text-2xl font-mono font-semibold">
-              {{ workTimeToday }}
+              {{ workTimeTodayText }}
             </div>
             <div class="text-xs text-muted-foreground">
-              Started at {{ clockInTime }}
+              Started at {{ clockInAt }}
             </div>
-          </div>
+          </div> -->
         </div>
       </CardContent>
     </Card>
@@ -45,7 +45,7 @@
       <Button
         :class="[
           'w-full h-16 text-lg font-semibold rounded-xl shadow-lg',
-          clockedIn 
+          isClockedIn 
             ? 'bg-red-500 hover:bg-red-600 text-white' 
             : 'bg-green-500 hover:bg-green-600 text-white'
         ]"
@@ -54,8 +54,8 @@
       >
         <div class="flex items-center justify-center gap-3">
           <Loader2 v-if="isLoading" class="h-6 w-6 animate-spin" />
-          <component v-else :is="clockedIn ? Square : Play" class="h-6 w-6" />
-          <span>{{ clockedIn ? 'Clock Out' : 'Clock In' }}</span>
+          <component v-else :is="isClockedIn ? Square : Play" class="h-6 w-6" />
+          <span>{{ isClockedIn ? 'Clock Out' : 'Clock In' }}</span>
         </div>
       </Button>
 
@@ -172,6 +172,7 @@ import { apiService } from '../../services/apiService.js';
 import cordovaIntegration from '../../services/cordovaIntegration.js';
 
 const props = defineProps({
+  // Legacy props kept for backward compatibility; component now fetches status from API
   clockedIn: { type: Boolean, default: false },
   clockInTime: String,
   workTimeToday: { type: String, default: '0:00' },
@@ -196,17 +197,28 @@ const locationVerified = ref(false);
 const latitude = ref(null);
 const longitude = ref(null);
 
+// Time status local state (fetched from /time-tracking/status)
+const isClockedIn = ref(false);
+const clockInAt = ref(props.clockInTime || '');
+const workTimeTodayText = ref(props.workTimeToday || '0:00');
+
 const recentActivity = ref([]);
 const activityLoading = ref(false);
 const activityError = ref('');
 
 let timeInterval;
 let activityInterval;
+let statusInterval;
 let locationWatchId = null;
 
 onMounted(() => {
   updateTime();
   timeInterval = setInterval(updateTime, 1000);
+  // Initialize with prop for immediate UI, then refresh from API
+  isClockedIn.value = !!props.clockedIn;
+  fetchTimeStatus().catch(() => {});
+  // Periodically refresh status while on screen
+  statusInterval = setInterval(() => fetchTimeStatus().catch(() => {}), 60_000);
   
   if (props.locationEnabled) {
     getCurrentLocation();
@@ -241,6 +253,9 @@ onUnmounted(() => {
   }
   if (activityInterval) {
     clearInterval(activityInterval);
+  }
+  if (statusInterval) {
+    clearInterval(statusInterval);
   }
   if (locationWatchId && navigator?.geolocation?.clearWatch) {
     try { navigator.geolocation.clearWatch(locationWatchId); } catch (_) {}
@@ -348,11 +363,12 @@ const toggleClock = async () => {
   isLoading.value = true;
   
   try {
-    if (props.clockedIn) {
+    const prev = isClockedIn.value;
+    if (isClockedIn.value) {
       // Start refreshing location in background if needed (don't block clock-out)
-      //if (props.locationEnabled && (!latitude.value || !longitude.value)) {
-      //  getCurrentLocation().catch(() => {});
-      //}
+      if (props.locationEnabled && (!latitude.value || !longitude.value)) {
+        getCurrentLocation().catch(() => {});
+      }
       // Emit payload with current (possibly last-known) location; parent will call API
       const payload = buildClockPayload();
       emit('clock-out', payload);
@@ -362,6 +378,11 @@ const toggleClock = async () => {
       // Emit clock-in immediately (parent handles API)
       emit('clock-in');
     }
+    // Wait for server status to flip, then force a full page reload for consistency
+    waitForStatusChangeAndReload(prev).catch(() => {
+      // Fallback: soft refresh status so UI isn't stale if reload fails
+      fetchTimeStatus().catch(() => {});
+    });
   } catch (error) {
     console.error('Clock toggle failed:', error);
   } finally {
@@ -414,6 +435,103 @@ const formatDateLabel = (d) => {
   if (isSameDay(d, yest)) return 'Yesterday';
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
+
+// Fetch current time tracking status from API
+async function fetchTimeStatus() {
+  try {
+    const res = await apiService.getTimeStatus();
+    const data = res?.data ?? res ?? {};
+
+    // Determine clocked-in boolean
+    isClockedIn.value = Boolean(
+      data.is_clocked_in ?? data.clocked_in ?? (data.status === 'clocked_in') ?? false
+    );
+
+    // Extract clock-in timestamp
+    const inTs = data.clock_in_time || data.clock_in || data.started_at || data.start_time;
+    if (inTs) {
+      const d = new Date(inTs);
+      clockInAt.value = formatTime(d);
+    } else {
+      clockInAt.value = '';
+    }
+
+    // Work time today: accept seconds, minutes, or a formatted string
+    const wt = data.work_time_today ?? data.total_seconds_today ?? data.total_minutes_today;
+    workTimeTodayText.value = formatDuration(wt);
+  } catch (err) {
+    // Keep previous displayed values; optionally log
+    console.warn('Failed to fetch time status:', err);
+  }
+}
+
+function formatDuration(value) {
+  if (value == null) {
+    return workTimeTodayText.value || '0:00';
+  }
+  // If already a string like "1:23" or "01:23:45", return as-is
+  if (typeof value === 'string') return value;
+  // If it's a number, assume seconds if >= 3600, else minutes if < 3600 but > 120? Safer: prefer seconds, but accept minutes via heuristic flag
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return '0:00';
+  // Heuristic: if n > 600, likely seconds; else could be minutes; we'll try seconds first
+  const seconds = n > 600 ? n : (n <= 24 * 60 ? n * 60 : n);
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  // Show H:MM
+  return `${h}:${String(m).padStart(2, '0')}`;
+}
+
+// Poll status until it changes from previous state, then reload the page
+async function waitForStatusChangeAndReload(prevState) {
+  const started = Date.now();
+  const timeoutMs = 7000; // max wait 7s
+  const intervalMs = 500; // poll every 0.5s
+
+  // Do an immediate fetch attempt first
+  await fetchTimeStatus();
+  if (isClockedIn.value !== prevState) {
+    persistRefreshTarget('clock');
+    safeReload();
+    return;
+  }
+
+  // Continue polling until change or timeout
+  while (Date.now() - started < timeoutMs) {
+    await new Promise(r => setTimeout(r, intervalMs));
+    try {
+      await fetchTimeStatus();
+      if (isClockedIn.value !== prevState) {
+        persistRefreshTarget('clock');
+        safeReload();
+        return;
+      }
+    } catch (_) {
+      // Ignore transient errors and continue
+    }
+  }
+  // Timeout fallback: force reload anyway to avoid stale UI
+  persistRefreshTarget('clock');
+  safeReload();
+}
+
+function safeReload() {
+  try {
+    // In Cordova WebView this reloads the current www index
+    window.location.reload();
+  } catch (_) {
+    // Secondary fallback via hard navigation
+    try { window.location.assign(window.location.href); } catch (_) {}
+  }
+}
+
+function persistRefreshTarget(viewId) {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('mobile.refreshTarget', JSON.stringify({ view: viewId, at: Date.now() }));
+    }
+  } catch (_) {}
+}
 </script>
 
 <style scoped>
