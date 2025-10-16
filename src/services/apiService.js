@@ -359,7 +359,6 @@ class TicktraxApiService {
     try {
       const url = `${this.baseURL}${endpoint}`;
       const headers = {
-        'Content-Type': 'application/json',
         'Accept': 'application/json',
         ...options.headers
       };
@@ -381,6 +380,11 @@ class TicktraxApiService {
         headers,
         ...options
       };
+
+      // Only set Content-Type if there is an explicit JSON body
+      if (config.body && !headers['Content-Type']) {
+        headers['Content-Type'] = 'application/json';
+      }
 
       console.log(`[API] ${method} ${url}`);
       
@@ -418,9 +422,11 @@ class TicktraxApiService {
       return data;
     } catch (error) {
       console.error('[API] Error:', error);
-      
+
       // 🔄 Fallback to Mock Service for Development
-      if (error.message.includes('401') || error.message.includes('403') || error.message.includes('404') || error.message.includes('Failed to fetch')) {
+      // Do NOT fallback when running inside Cordova (mobile), always use real API
+      const isCordova = typeof window !== 'undefined' && (window.cordova || window.PhoneGap || window.phonegap);
+      if (!isCordova && (error.message.includes('401') || error.message.includes('403') || error.message.includes('404') || error.message.includes('Failed to fetch'))) {
         console.log(`[API] Falling back to mock service for: ${endpoint}`);
         try {
           return await this.getMockResponse(endpoint, options);
@@ -428,7 +434,7 @@ class TicktraxApiService {
           console.error(`[API] Mock service also failed:`, mockError);
         }
       }
-      
+
       throw error;
     }
   }
@@ -627,35 +633,72 @@ class TicktraxApiService {
   // ==================== ⏰ TIME TRACKING (7 endpoints) ====================
   
   async clockIn(payload) {
-    const result = await this.request(API_CONFIG.ENDPOINTS.TIME.CLOCK_IN, {
-      method: 'POST',
-      body: JSON.stringify(payload)
-    });
+    // Prefer new endpoint if available
+    const endpoint = API_CONFIG.ENDPOINTS.TIME_TRACKING?.CLOCK_IN || API_CONFIG.ENDPOINTS.TIME.CLOCK_IN;
+    const options = { method: 'POST' };
+    if (payload && (typeof payload === 'object') && Object.keys(payload).length > 0) {
+      options.body = JSON.stringify(payload);
+    }
+    const result = await this.request(endpoint, options);
     
-    // Clear time-related caches
-    this.clearCache(this.generateCacheKey(API_CONFIG.ENDPOINTS.TIME.STATUS));
+    // Clear time-related caches (both legacy and time-tracking endpoints)
+    try {
+      this.clearCache(this.generateCacheKey(API_CONFIG.ENDPOINTS.TIME.STATUS));
+    } catch (_) {}
+    try {
+      if (API_CONFIG.ENDPOINTS.TIME_TRACKING?.STATUS) {
+        this.clearCache(this.generateCacheKey(API_CONFIG.ENDPOINTS.TIME_TRACKING.STATUS));
+      }
+    } catch (_) {}
+    try {
+      this.clearCache(this.generateCacheKey(API_CONFIG.ENDPOINTS.TIME.ENTRIES));
+    } catch (_) {}
+    try {
+      if (API_CONFIG.ENDPOINTS.TIME_TRACKING?.ENTRIES) {
+        this.clearCache(this.generateCacheKey(API_CONFIG.ENDPOINTS.TIME_TRACKING.ENTRIES));
+      }
+    } catch (_) {}
     
     return result;
   }
 
   async clockOut(payload) {
-    const result = await this.request(API_CONFIG.ENDPOINTS.TIME.CLOCK_OUT, {
-      method: 'POST',
-      body: JSON.stringify(payload)
-    });
+    const endpoint = API_CONFIG.ENDPOINTS.TIME_TRACKING?.CLOCK_OUT || API_CONFIG.ENDPOINTS.TIME.CLOCK_OUT;
+    const options = { method: 'POST' };
+    if (payload && (typeof payload === 'object') && Object.keys(payload).length > 0) {
+      options.body = JSON.stringify(payload);
+    }
+    const result = await this.request(endpoint, options);
     
-    // Clear time-related caches
-    this.clearCache(this.generateCacheKey(API_CONFIG.ENDPOINTS.TIME.STATUS));
+    // Clear time-related caches (both legacy and time-tracking endpoints)
+    try {
+      this.clearCache(this.generateCacheKey(API_CONFIG.ENDPOINTS.TIME.STATUS));
+    } catch (_) {}
+    try {
+      if (API_CONFIG.ENDPOINTS.TIME_TRACKING?.STATUS) {
+        this.clearCache(this.generateCacheKey(API_CONFIG.ENDPOINTS.TIME_TRACKING.STATUS));
+      }
+    } catch (_) {}
+    try {
+      this.clearCache(this.generateCacheKey(API_CONFIG.ENDPOINTS.TIME.ENTRIES));
+    } catch (_) {}
+    try {
+      if (API_CONFIG.ENDPOINTS.TIME_TRACKING?.ENTRIES) {
+        this.clearCache(this.generateCacheKey(API_CONFIG.ENDPOINTS.TIME_TRACKING.ENTRIES));
+      }
+    } catch (_) {}
     
     return result;
   }
 
   async getTimeStatus() {
-    return await this.getCached(API_CONFIG.ENDPOINTS.TIME.STATUS, {}, { cacheTTL: 30000 }); // 30 seconds
+    const endpoint = API_CONFIG.ENDPOINTS.TIME_TRACKING?.STATUS || API_CONFIG.ENDPOINTS.TIME.STATUS;
+    return await this.getCached(endpoint, {}, { cacheTTL: 30000 }); // 30 seconds
   }
 
   async getTimeEntries(params = {}) {
-    return await this.getCached(API_CONFIG.ENDPOINTS.TIME.ENTRIES, params);
+    const endpoint = API_CONFIG.ENDPOINTS.TIME_TRACKING?.ENTRIES || API_CONFIG.ENDPOINTS.TIME.ENTRIES;
+    return await this.getCached(endpoint, params);
   }
 
   async createManualTimeEntry(payload) {

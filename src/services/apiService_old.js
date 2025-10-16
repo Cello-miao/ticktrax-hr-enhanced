@@ -1,6 +1,5 @@
 // Comprehensive API Service for Gotham Time Manager
 import { API_CONFIG, buildApiUrl } from '../config/api.js';
-import { getMobileApiConfig, isCordovaApp } from '../config/mobile.js';
 import { mockApiService } from './mockApiService.js';
 
 class ApiService {

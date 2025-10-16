@@ -45,13 +45,17 @@ console.debug('[Settings] module loaded');
 import { ref, onMounted } from 'vue';
 import Card from '../ui/card.vue';
 import Button from '../ui/button.vue';
+import { apiService } from '../../services/apiService.js';
+import { useToast } from '../ui/toast/use-toast.js';
 
+const { toast } = useToast();
 const notificationsEnabled = ref(true);
 const theme = ref('system');
 
 const signOutAll = () => {
   console.debug('[Settings] signOutAll');
-  alert('Signed out of all devices (demo)');
+  // Placeholder: no endpoint defined; show a non-blocking toast
+  toast.success('Sign-out requested');
 };
 
 onMounted(() => {

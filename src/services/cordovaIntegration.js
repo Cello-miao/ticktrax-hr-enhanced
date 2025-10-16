@@ -54,8 +54,28 @@ class CordovaIntegration {
     this.setupNetwork();
     this.setupBackButton();
     this.setupDeepLinks();
+
+    // Start a lightweight background watch so we have a last-known position
+    try {
+      this.locationWatchId = this.watchLocation(() => {});
+    } catch (e) {
+      console.warn('📍 Failed to start background location watch:', e);
+    }
     
     console.log('✅ Cordova fully initialized');
+  }
+
+  // Wait until Cordova is ready (no-op in browser). Rejects after timeout.
+  async waitUntilReady(timeoutMs = 8000) {
+    if (!this.isCordova()) return true;
+    if (this.isReady) return true;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('Cordova not ready (timeout)')), timeoutMs);
+      document.addEventListener('deviceready', () => {
+        clearTimeout(timer);
+        resolve(true);
+      }, { once: true });
+    });
   }
 
   // ==================== STATUS BAR ====================
@@ -75,6 +95,54 @@ class CordovaIntegration {
   }
 
   // ==================== GEOLOCATION ====================
+
+  async requestLocationPermission() {
+    try {
+      if (!window.cordova || !cordova.plugins || !cordova.plugins.permissions) return true;
+      const permissions = cordova.plugins.permissions;
+      const fine = permissions.ACCESS_FINE_LOCATION;
+      const coarse = permissions.ACCESS_COARSE_LOCATION;
+
+      const has = await new Promise((resolve) => {
+        permissions.checkPermission(fine, (status) => resolve(!!status.hasPermission), () => resolve(false));
+      });
+      if (has) return true;
+
+      const granted = await new Promise((resolve) => {
+        permissions.requestPermissions([fine, coarse], (status) => {
+          try {
+            resolve(!!status.hasPermission);
+          } catch (_) {
+            resolve(false);
+          }
+        }, () => resolve(false));
+      });
+      return !!granted;
+    } catch (e) {
+      console.warn('🔐 Location permission request failed or unavailable:', e);
+      return true; // don't block on permission helper
+    }
+  }
+
+  async ensureLocationServicesEnabled() {
+    try {
+      // If diagnostic plugin not available, just return true
+      if (!window.cordova || !window.cordova.plugins || !window.cordova.plugins.diagnostic) return true;
+      const diagnostic = window.cordova.plugins.diagnostic;
+      const enabled = await new Promise((resolve) => {
+        diagnostic.isLocationEnabled((res) => resolve(!!res), () => resolve(false));
+      });
+      if (enabled) return true;
+      // Attempt to request turning on location services (Android)
+      if (diagnostic.switchToLocationSettings) {
+        diagnostic.switchToLocationSettings();
+      }
+      return false;
+    } catch (e) {
+      console.warn('🧭 Unable to verify/enable location services:', e);
+      return true; // don't block if the helper fails
+    }
+  }
 
   async getCurrentLocation() {
     return new Promise((resolve, reject) => {
@@ -105,6 +173,67 @@ class CordovaIntegration {
         }
       );
     });
+  }
+
+  /**
+   * Attempt to get a location using multiple strategies:
+   * 1) High accuracy, short timeout
+   * 2) Low accuracy, longer timeout
+   * 3) Last known position from background watch
+   */
+  async getBestEffortLocation() {
+    // Ensure cordova is ready when applicable
+    try { await this.waitUntilReady(5000); } catch (_) {}
+    // Request permissions if plugin available
+    try { await this.requestLocationPermission(); } catch (_) {}
+    // Ensure location services are enabled
+    try { await this.ensureLocationServicesEnabled(); } catch (_) {}
+
+    // Strategy 1: high accuracy fast
+    try {
+      const loc = await new Promise((resolve, reject) => {
+        if (!navigator.geolocation) return reject(new Error('Geolocation not supported'));
+        navigator.geolocation.getCurrentPosition(
+          (position) => resolve({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            timestamp: position.timestamp
+          }),
+          (err) => reject(err),
+          { enableHighAccuracy: true, timeout: 6000, maximumAge: 15000 }
+        );
+      });
+      this.currentPosition = loc;
+      return loc;
+    } catch (_) {}
+
+    // Strategy 2: low accuracy, longer timeout
+    try {
+      const loc = await new Promise((resolve, reject) => {
+        if (!navigator.geolocation) return reject(new Error('Geolocation not supported'));
+        navigator.geolocation.getCurrentPosition(
+          (position) => resolve({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            timestamp: position.timestamp
+          }),
+          (err) => reject(err),
+          { enableHighAccuracy: false, timeout: 15000, maximumAge: 120000 }
+        );
+      });
+      this.currentPosition = loc;
+      return loc;
+    } catch (_) {}
+
+    // Strategy 3: last known
+    if (this.currentPosition) {
+      return this.currentPosition;
+    }
+
+    // Give up
+    throw new Error('Location unavailable');
   }
 
   watchLocation(callback) {

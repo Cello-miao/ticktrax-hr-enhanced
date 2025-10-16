@@ -17,36 +17,16 @@
       <!-- Login Form -->
       <Card class="shadow-xl border-0">
         <CardContent class="space-y-6 p-6">
-          <!-- Login Mode Toggle -->
-          <div class="flex rounded-lg bg-muted p-1">
-            <Button
-              :variant="loginMode === 'email' ? 'default' : 'ghost'"
-              size="sm"
-              class="flex-1"
-              @click="loginMode = 'email'"
-            >
-              Email
-            </Button>
-            <Button
-              :variant="loginMode === 'username' ? 'default' : 'ghost'"
-              size="sm"
-              class="flex-1"
-              @click="loginMode = 'username'"
-            >
-              Username
-            </Button>
-          </div>
-
-          <!-- Email/Username Input -->
+          <!-- Email Input (username removed) -->
           <div class="space-y-2">
-            <Label :for="loginMode">{{ loginMode === 'email' ? 'Email' : 'Username' }}</Label>
+            <Label for="email">Email</Label>
             <Input 
-              :id="loginMode"
-              :type="loginMode === 'email' ? 'email' : 'text'" 
-              :placeholder="loginMode === 'email' ? 'your@email.com' : 'username'" 
-              v-model="emailOrUsername"
+              id="email"
+              type="email"
+              placeholder="you@example.com"
+              v-model="email"
               class="h-12 text-base"
-              :inputmode="loginMode === 'email' ? 'email' : 'text'"
+              inputmode="email"
               autocomplete="username"
               @keydown.enter="handleLogin"
             />
@@ -88,13 +68,13 @@
           <Button 
             class="w-full h-12 text-base font-semibold" 
             @click="handleLogin" 
-            :disabled="isLoading || !emailOrUsername || !password"
+            :disabled="isLoading || !email || !password"
           >
             <Loader2 v-if="isLoading" class="mr-2 h-4 w-4 animate-spin" />
             {{ isLoading ? 'Signing In...' : 'Sign In' }}
           </Button>
 
-          <!-- Biometric Login (if available) -->
+          <!-- Biometric Login (placeholder - requires backend support) -->
           <div v-if="biometricSupported" class="text-center">
             <div class="relative">
               <div class="absolute inset-0 flex items-center">
@@ -123,36 +103,7 @@
         </CardContent>
       </Card>
 
-      <!-- Demo Accounts -->
-      <Card class="shadow-lg border-0">
-        <CardContent class="p-4">
-          <div class="flex items-center gap-2 mb-3">
-            <Shield class="h-4 w-4 text-muted-foreground" />
-            <span class="text-sm font-medium">Demo Accounts</span>
-          </div>
-          
-          <div class="grid gap-2">
-            <Button
-              v-for="account in demoAccounts"
-              :key="account.email"
-              variant="outline"
-              size="sm"
-              class="justify-start h-auto p-3"
-              @click="handleDemoLogin(account)"
-            >
-              <div class="flex items-center justify-between w-full">
-                <div class="text-left">
-                  <div class="font-medium text-sm">{{ account.name }}</div>
-                  <div class="text-xs text-muted-foreground">{{ account.username }}</div>
-                </div>
-                <Badge :variant="account.role === 'admin' ? 'default' : 'secondary'" class="text-xs">
-                  {{ account.role }}
-                </Badge>
-              </div>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <!-- Demo Accounts removed for production -->
 
       <!-- Network Status -->
       <div class="text-center">
@@ -179,28 +130,20 @@ import { CardContent } from '../ui/card-components.vue';
 import Button from '../ui/button.vue';
 import Input from '../ui/input.vue';
 import Label from '../ui/label.vue';
-import Badge from '../ui/badge.vue';
 import Alert from '../ui/alert.vue';
 import { 
-  Clock, Shield, Eye, EyeOff, Loader2, AlertTriangle, 
-  Fingerprint, Wifi, WifiOff 
+  Clock, Eye, EyeOff, Loader2, AlertTriangle, 
+  Fingerprint 
 } from 'lucide-vue-next';
 import authManager from '../../services/authService.js';
 
 const emit = defineEmits(['login']);
-
-const demoAccounts = [
-  { email: "employee_user@example.com", username: "employee_user", password: "employee123", role: "employee", name: "Employee User" },
-  { email: "manager_user@example.com", username: "manager_user", password: "manager123", role: "manager", name: "Manager User" },
-  { email: "admin_user@example.com", username: "admin_user", password: "admin123", role: "admin", name: "Admin User" },
-];
-
-const emailOrUsername = ref("");
+ 
+const email = ref("");
 const password = ref("");
 const showPassword = ref(false);
 const error = ref("");
 const isLoading = ref(false);
-const loginMode = ref("email");
 const networkStatus = ref("online");
 const biometricSupported = ref(false);
 
@@ -227,8 +170,8 @@ onMounted(async () => {
 });
 
 const handleLogin = async () => {
-  if (!emailOrUsername.value || !password.value) {
-    error.value = "Please enter both email/username and password";
+  if (!email.value || !password.value) {
+    error.value = "Please enter both email and password";
     return;
   }
 
@@ -236,12 +179,12 @@ const handleLogin = async () => {
   isLoading.value = true;
   
   try {
-    const result = await authManager.login(emailOrUsername.value, password.value);
+    const result = await authManager.login(email.value, password.value);
     
     if (result.success) {
       // Store credentials for biometric login if supported
       if (biometricSupported.value) {
-        localStorage.setItem('last_login_user', emailOrUsername.value);
+        localStorage.setItem('last_login_user', email.value);
       }
       // Normalize user display name across mock and real API shapes
       let displayName = '';
@@ -254,7 +197,7 @@ const handleLogin = async () => {
       } else if (user.email) {
         displayName = user.email;
       } else {
-        displayName = emailOrUsername.value;
+        displayName = email.value;
       }
 
       const role = user.role || (result.role || 'employee');
@@ -274,28 +217,18 @@ const handleLogin = async () => {
   }
 };
 
-const handleDemoLogin = async (account) => {
-  emailOrUsername.value = account.username;
-  password.value = account.password;
-  await handleLogin();
-};
-
 const handleBiometricLogin = async () => {
   if (!biometricSupported.value) return;
   
   try {
     isLoading.value = true;
     
-    // This would integrate with actual biometric authentication
-    // For demo purposes, we'll use the last logged in user
+    // Placeholder: integrate with platform authenticator / passkeys when backend is ready
     const lastUser = localStorage.getItem('last_login_user');
-    if (lastUser) {
-      const account = demoAccounts.find(acc => 
-        acc.email === lastUser || acc.username === lastUser
-      );
-      if (account) {
-        emit('login', account.name, account.role);
-      }
+    if (!lastUser) {
+      error.value = "Biometric login is not configured yet.";
+    } else {
+      error.value = "Biometric login requires server-side setup.";
     }
   } catch (err) {
     error.value = "Biometric authentication failed";

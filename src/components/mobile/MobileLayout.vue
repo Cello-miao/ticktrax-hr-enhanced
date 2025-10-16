@@ -25,17 +25,6 @@
         
         <!-- Header Actions -->
         <div class="flex items-center gap-2">
-          <!-- Notifications -->
-          <Button variant="ghost" size="sm" class="relative">
-            <Bell class="h-5 w-5" />
-            <Badge 
-              v-if="notifications > 0" 
-              class="absolute -top-1 -right-1 h-5 w-5 rounded-full text-xs"
-            >
-              {{ notifications }}
-            </Badge>
-          </Button>
-          
           <!-- Theme Toggle -->
           <ThemeToggle />
           
@@ -172,6 +161,15 @@ const emit = defineEmits(['update:currentView', 'logout', 'profileClick']);
 
 const sidebarOpen = ref(false);
 
+// Shared admin-like menu for admin/HR
+const adminMenuItems = [
+  //{ icon: Home, label: "Dashboard", id: "dashboard", shortLabel: "Home" },
+  { icon: Users, label: "Employee Management", id: "employees", shortLabel: "Staff" },
+  { icon: TrendingUp, label: "Analytics", id: "analytics", shortLabel: "Analytics" },
+  //{ icon: Settings, label: "Settings", id: "settings", shortLabel: "Settings" },
+  //{ icon: HelpCircle, label: "Help Center", id: "help", shortLabel: "Help" },
+];
+
 const roleConfig = {
   employee: {
     title: "Employee Portal",
@@ -191,26 +189,31 @@ const roleConfig = {
     menuItems: [
       { icon: Home, label: "Dashboard", id: "dashboard", shortLabel: "Home" },
       { icon: Users, label: "Team Overview", id: "team", shortLabel: "Team" },
-      { icon: FileText, label: "Approvals", id: "approvals", shortLabel: "Approvals" },
+      //{ icon: FileText, label: "Approvals", id: "approvals", shortLabel: "Approvals" },
       { icon: TrendingUp, label: "Reports", id: "reports", shortLabel: "Reports" },
-      { icon: Bell, label: "Alerts", id: "alerts", shortLabel: "Alerts" },
-      { icon: HelpCircle, label: "Help Center", id: "help", shortLabel: "Help" },
+      //{ icon: Bell, label: "Alerts", id: "alerts", shortLabel: "Alerts" },
+      //{ icon: HelpCircle, label: "Help Center", id: "help", shortLabel: "Help" },
     ],
   },
   admin: {
     title: "Admin Portal",
     icon: Shield,
-    menuItems: [
-      { icon: Home, label: "Dashboard", id: "dashboard", shortLabel: "Home" },
-      { icon: Users, label: "Employee Management", id: "employees", shortLabel: "Staff" },
-      { icon: TrendingUp, label: "Analytics", id: "analytics", shortLabel: "Analytics" },
-      { icon: Settings, label: "Settings", id: "settings", shortLabel: "Settings" },
-      { icon: HelpCircle, label: "Help Center", id: "help", shortLabel: "Help" },
-    ],
+    menuItems: adminMenuItems,
+  },
+  hr: {
+    title: "HR Portal",
+    icon: Shield,
+    menuItems: adminMenuItems,
   },
 };
 
-const currentConfig = computed(() => roleConfig[props.currentRole] || roleConfig.employee);
+// Resolve role case-insensitively and alias common variants
+const currentRoleKey = computed(() => String(props.currentRole || '').toLowerCase());
+const currentConfig = computed(() => {
+  const key = currentRoleKey.value;
+  const normalized = key === 'administrator' ? 'admin' : key;
+  return roleConfig[normalized] || roleConfig.employee;
+});
 
 // Quick navigation items for bottom nav (max 5 items)
 const quickNavItems = computed(() => {
@@ -246,9 +249,27 @@ const asideStyle = computed(() => {
   };
 });
 
+const REFRESHABLE_VIEWS = new Set(['dashboard','clock','timesheet','schedule','reports']);
+
 const handleNavigation = (viewId) => {
+  // Emit navigation first so any listeners can respond
   emit('update:currentView', viewId);
   closeSidebar('nav');
+
+  // If this is one of the main bottom nav items, trigger a full refresh
+  if (REFRESHABLE_VIEWS.has(viewId)) {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('mobile.refreshTarget', JSON.stringify({ view: viewId, at: Date.now() }));
+      }
+    } catch (_) {}
+    // Give the event loop a tick to process the state change, then reload
+    setTimeout(() => {
+      try { window.location.reload(); } catch (_) {
+        try { window.location.assign(window.location.href); } catch (_) {}
+      }
+    }, 80);
+  }
 };
 </script>
 

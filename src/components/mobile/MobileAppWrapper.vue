@@ -43,10 +43,10 @@
                   <div class="text-2xl font-bold text-primary">{{ workTimeToday }}</div>
                   <div class="text-sm text-muted-foreground">Hours Worked</div>
                 </div>
-                <div>
+                <!-- <div>
                   <div class="text-2xl font-bold text-primary">{{ tasksCompleted }}</div>
                   <div class="text-sm text-muted-foreground">Tasks Done</div>
-                </div>
+                </div> -->
               </div>
             </Card>
           </div>
@@ -104,7 +104,7 @@
   <!-- Profile Modal -->
   <Profile 
     v-if="showProfile" 
-    :user="userProfile || { first_name: user.name, role: user.role }" 
+    :user="userProfile || null" 
     @close="handleProfileClose" 
     @logout="handleProfileLogout" 
   />
@@ -179,13 +179,14 @@ import Button from '../ui/button.vue';
 import authManager from '../../services/authService.js';
 import { apiService } from '../../services/apiService.js';
 import cordovaIntegration from '../../services/cordovaIntegration.js';
+import { computeAggregatesFromEntries } from '../../utils/timeUtils.js';
 
 const { toast } = useToast();
 
 const user = ref(null);
 const userProfile = ref(null); // raw profile object (first_name, last_name, email, role)
 const currentView = ref('dashboard');
-const notifications = ref(3);
+const notifications = ref(0);
 const showProfile = ref(false);
 // Track last set to detect rapid unwanted overwrites
 const lastSet = ref({ view: currentView.value, at: Date.now() });
@@ -197,17 +198,34 @@ const isMobile = ref(false);
 const clockedIn = ref(false);
 const clockInTime = ref('');
 const workTimeToday = ref('0:00');
-const weeklyHours = ref('35h');
-const monthlyHours = ref('142h');
+const weeklyHours = ref('0h');
+const monthlyHours = ref('0h');
 const locationEnabled = ref(true);
-const tasksCompleted = ref(12);
+const tasksCompleted = ref(0);
 
 // PWA install
 const deferredPrompt = ref(null);
 const showInstallPrompt = ref(false);
+// Tracks whether a bottom-nav initiated refresh target was set this load
+const hasRefreshTargetInit = ref(false);
 
 onMounted(() => {
   detectMobile();
+
+  // Restore target view after a reload triggered by bottom nav BEFORE auth decides landing
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('mobile.refreshTarget') : null;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.view === 'string') {
+        currentView.value = parsed.view;
+        hasRefreshTargetInit.value = true;
+      }
+      // Clear after capture; we keep an in-memory flag to avoid overrides
+      localStorage.removeItem('mobile.refreshTarget');
+    }
+  } catch (_) {}
+
   setupPWA();
   checkAuthState();
   
@@ -260,6 +278,26 @@ const checkAuthState = async () => {
         name: `${profile.first_name || profile.firstName || ''} ${profile.last_name || profile.lastName || ''}`.trim(),
         role: profile.role || 'employee'
       };
+      // If no explicit refresh target set this session and currentView is still the default,
+      // prefer showing Employees for admin users; otherwise keep existing behavior.
+      try {
+        // Respect explicit navigation intent (e.g., bottom nav Home/Clock) during this load
+        const hasRefreshTarget = hasRefreshTargetInit.value === true;
+        const roleLc = String(user.value.role || '').toLowerCase();
+        if (!hasRefreshTarget && (!currentView.value || currentView.value === 'dashboard')) {
+          if (roleLc === 'admin' || roleLc === 'hr' || roleLc === 'human resources') {
+            currentView.value = 'employees';
+          } else if (isMobile.value) {
+            currentView.value = 'clock';
+          }
+        }
+      } catch (_) {}
+      // Ensure data like clockedIn/status/hours are loaded when session exists
+      try {
+        await loadMobileData();
+      } catch (e) {
+        console.warn('Auto-load mobile data failed:', e);
+      }
     }
   }
 };
@@ -267,12 +305,52 @@ const checkAuthState = async () => {
 const handleLogin = async (userName, role) => {
   console.log('📱 Mobile: Login successful', userName, role);
   user.value = { name: userName, role };
-  currentView.value = isMobile.value ? 'clock' : 'dashboard';
-  toast.success(`Welcome back, ${userName}!`);
+  // Default landing per role: admins go to Employees; others keep clock on mobile, dashboard on desktop
+  const roleLc = String(role || '').toLowerCase();
+  if (roleLc === 'admin' || roleLc === 'hr' || roleLc === 'human resources') {
+    currentView.value = 'employees';
+  } else {
+    currentView.value = isMobile.value ? 'clock' : 'dashboard';
+  }
+  try {
+    const hasRefreshTarget = typeof localStorage !== 'undefined' && localStorage.getItem('mobile.refreshTarget');
+    if (!hasRefreshTarget) {
+      toast.success(`Welcome back, ${userName}!`);
+    }
+  } catch (_) {}
   
   // Load initial data
   await loadMobileData();
 };
+
+// Small helper to refresh time status from API
+const refreshTimeStatus = async () => {
+  const statusRes = await apiService.getTimeStatus();
+  if (statusRes) {
+    // Use is_clocked_in from /time-tracking/status
+    clockedIn.value = !!statusRes.is_clocked_in;
+    if (statusRes.clock_in_time) {
+      const time = new Date(statusRes.clock_in_time);
+      clockInTime.value = time.toLocaleTimeString('en-US', { 
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } else {
+      clockInTime.value = '';
+    }
+    // Set a baseline for today's hours; may be overridden by entries below
+    const todayHours = Number(statusRes.total_hours_today || statusRes.hours_today || 0);
+    workTimeToday.value = `${todayHours.toFixed(1)}`;
+  }
+};
+
+// Refresh status whenever switching to Clock view
+watch(currentView, async (next) => {
+  if (next === 'clock') {
+    try { await refreshTimeStatus(); } catch (e) { console.warn('Failed to refresh status on view change', e); }
+  }
+});
 
 // Load mobile data from API
 const loadMobileData = async () => {
@@ -284,43 +362,40 @@ const loadMobileData = async () => {
     
     const userId = userRes.data.id;
     
-    // Get clock status
-    const statusRes = await apiService.getCurrentStatus(userId);
-    if (statusRes) {
-      clockedIn.value = statusRes.is_clocked_in || false;
-      if (statusRes.clock_in_time) {
-        const time = new Date(statusRes.clock_in_time);
-        clockInTime.value = time.toLocaleTimeString('en-US', { 
-          hour12: false,
-          hour: '2-digit',
-          minute: '2-digit'
-        });
-      }
-      workTimeToday.value = (statusRes.total_hours_today || 0).toFixed(1);
-    }
+    // Get clock status (uses is_clocked_in)
+    await refreshTimeStatus();
     
-    // Get time entries
-    const entriesRes = await apiService.getUserWorkingTimes(userId);
-    if (entriesRes && Array.isArray(entriesRes)) {
-      // Calculate weekly and monthly hours
-      const now = new Date();
-      const startOfWeek = new Date(now);
-      startOfWeek.setDate(now.getDate() - now.getDay());
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      
-      let weekHours = 0;
-      let monthHours = 0;
-      
-      entriesRes.forEach(entry => {
-        const entryDate = new Date(entry.date || entry.start_date);
-        const hours = entry.duration_hours || entry.hours || 0;
-        
-        if (entryDate >= startOfWeek) weekHours += hours;
-        if (entryDate >= startOfMonth) monthHours += hours;
-      });
-      
-      weeklyHours.value = weekHours.toFixed(1);
-      monthlyHours.value = monthHours.toFixed(1);
+    // Get time entries (real API) and compute hours in French time (Europe/Paris)
+    try {
+      const entriesRes = await apiService.getTimeEntries({ page: 1, limit: 200 });
+      const agg = computeAggregatesFromEntries(entriesRes, new Date());
+  weeklyHours.value = agg.formatHours1(agg.weekHours);
+  monthlyHours.value = agg.formatHours1(agg.monthHours);
+  // Override today's hours with entries-based calculation (Paris day overlap)
+  workTimeToday.value = agg.formatHours1Raw(agg.todayHours);
+    } catch (e) {
+      console.warn('⚠️ Failed to compute hours from entries (FR time):', e);
+    }
+
+    // Notifications (unread count)
+    try {
+      const unreadRes = await apiService.getUnreadCount();
+      notifications.value = Number(unreadRes?.count || unreadRes?.data?.count || 0);
+    } catch (e) {
+      console.warn('⚠️ Failed to load unread notifications:', e);
+    }
+
+    // Analytics overview to populate quick stat (tasks completed today if available)
+    try {
+      const analytics = await apiService.getAnalyticsOverview();
+      tasksCompleted.value = Number(
+        analytics?.tasks_completed_today ||
+        analytics?.completed_tasks ||
+        analytics?.metrics?.tasks_completed_today ||
+        0
+      );
+    } catch (e) {
+      console.warn('⚠️ Failed to load analytics overview:', e);
     }
     
     console.log('📱 Mobile data loaded successfully');
@@ -437,7 +512,8 @@ const handleClockIn = async () => {
     let location = null;
     if (cordovaIntegration.isCordova()) {
       try {
-        location = await cordovaIntegration.getCurrentLocation();
+        // Try best-effort location first
+        location = await cordovaIntegration.getBestEffortLocation();
         console.log('📍 Location obtained:', location);
       } catch (locError) {
         console.warn('📍 Location error:', locError);
@@ -448,7 +524,11 @@ const handleClockIn = async () => {
     console.log('📱 Calling clock in API...');
     const result = await apiService.clockIn(location ? {
       latitude: location.latitude,
-      longitude: location.longitude
+      longitude: location.longitude,
+      lat: location.latitude,
+      lng: location.longitude,
+      accuracy: location.accuracy,
+      location_timestamp: location.timestamp
     } : null);
     console.log('📱 Clock In result:', result);
     
@@ -463,23 +543,31 @@ const handleClockIn = async () => {
     cordovaIntegration.vibrate(100);
     toast.success('Clocked in successfully');
     
-    // Refresh data
-    await loadMobileData();
+  // Refresh data and status for immediate UI update
+  await loadMobileData();
+  try { await apiService.getTimeStatus(); } catch (_) {}
   } catch (error) {
     console.error('📱 Clock in error:', error);
     toast.error('Failed to clock in: ' + error.message);
   }
 };
 
-const handleClockOut = async () => {
+const handleClockOut = async (payload) => {
   try {
     console.log('📱 Mobile: Clock Out - getting location...');
+    // Prevent duplicate taps by marking UI state
+    const prevState = clockedIn.value;
+    clockedIn.value = false; // optimistic toggle for UI responsiveness
     
     // Get location if Cordova is available
     let location = null;
-    if (cordovaIntegration.isCordova()) {
+    // Prefer payload from child if provided
+    if (payload && typeof payload.latitude === 'number' && typeof payload.longitude === 'number') {
+      location = { latitude: payload.latitude, longitude: payload.longitude };
+    } else if (cordovaIntegration.isCordova()) {
       try {
-        location = await cordovaIntegration.getCurrentLocation();
+        // Try best-effort location first
+        location = await cordovaIntegration.getBestEffortLocation();
         console.log('📍 Location obtained:', location);
       } catch (locError) {
         console.warn('📍 Location error:', locError);
@@ -487,10 +575,25 @@ const handleClockOut = async () => {
     }
     
     console.log('📱 Calling clock out API...');
-    const result = await apiService.clockOut(location ? {
-      latitude: location.latitude,
-      longitude: location.longitude
-    } : null);
+    const finalPayload = { ...(payload || {}) };
+    if (location && typeof location.latitude === 'number' && typeof location.longitude === 'number') {
+      finalPayload.latitude = location.latitude;
+      finalPayload.longitude = location.longitude;
+      // alt keys for compatibility
+      if (finalPayload.lat === undefined) finalPayload.lat = location.latitude;
+      if (finalPayload.lng === undefined) finalPayload.lng = location.longitude;
+      if (location.accuracy != null && finalPayload.accuracy === undefined) finalPayload.accuracy = location.accuracy;
+      if (location.timestamp != null && finalPayload.location_timestamp === undefined) finalPayload.location_timestamp = location.timestamp;
+      if (finalPayload.gps_verified === undefined) finalPayload.gps_verified = true;
+    }
+    // Only send a payload if we actually have coordinates
+    const hasCoords = (typeof finalPayload.latitude === 'number' && typeof finalPayload.longitude === 'number') ||
+                      (typeof finalPayload.lat === 'number' && typeof finalPayload.lng === 'number');
+    if (!hasCoords) {
+      // avoid sending a body with only flags when no coords
+      ['gps_verified', 'accuracy', 'location_timestamp', 'lat', 'lng', 'latitude', 'longitude'].forEach(k => delete finalPayload[k]);
+    }
+    const result = await apiService.clockOut(Object.keys(finalPayload).length ? finalPayload : undefined);
     console.log('📱 Clock Out result:', result);
     
     clockedIn.value = false;
@@ -500,11 +603,20 @@ const handleClockOut = async () => {
     cordovaIntegration.vibrate(200);
     toast.success('Clocked out successfully');
     
-    // Refresh data
+    // Refresh data and status for immediate UI update
+    try { await refreshTimeStatus(); } catch (_) {}
     await loadMobileData();
   } catch (error) {
     console.error('📱 Clock out error:', error);
-    toast.error('Failed to clock out: ' + error.message);
+    const msg = String(error?.message || '').toLowerCase();
+    const friendly = msg.includes('401') ? 'Unauthorized. Please log in again.'
+                  : msg.includes('403') ? 'Permission denied to clock out.'
+                  : msg.includes('timeout') ? 'Network timeout. Check connection and try again.'
+                  : msg.includes('location') ? 'Clock out failed due to missing location. Enable GPS/permissions and try again.'
+                  : 'Unexpected error. Please try again.';
+    toast.error('Failed to clock out: ' + friendly);
+    // Revert optimistic toggle if needed
+    try { await refreshTimeStatus(); } catch (_) {}
   }
 };
 

@@ -31,13 +31,10 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "mobile:prepare": "./build-mobile.sh",
-    "mobile:build": "npm run build && cd mobile && npx cordova build",
-    "mobile:build:android": "npm run build && cd mobile && npx cordova build android",
-    "mobile:build:ios": "npm run build && cd mobile && npx cordova build ios",
-    "mobile:run:android": "npm run mobile:prepare && cd mobile && npx cordova run android",
-    "mobile:run:ios": "npm run mobile:prepare && cd mobile && npx cordova run ios",
-    "mobile:open:android": "cd mobile && npx cordova open android",
-    "mobile:open:ios": "cd mobile && npx cordova open ios"
+    "mobile:init": "npx cordova create mobile com.ticktrax.app 'TickTrax'",
+    "mobile:prepare": "npm run build && rm -rf mobile/www && mkdir -p mobile/www && cp -r build/* mobile/www/",
+    "mobile:platform:android": "cd mobile && npx cordova platform add android",
+    "mobile:build:android": "npm run mobile:prepare && cd mobile && npx cordova build android",
+    "mobile:run:android": "npm run mobile:prepare && cd mobile && npx cordova run android"
   }
 }
