@@ -495,120 +495,16 @@ if (typeof window !== 'undefined') {
   };
 }
 
+// NOTE: The MobileClockWidget handles API/queue for clock-in itself to support offline mode.
+// Keep this handler as a no-op to avoid duplicate records.
 const handleClockIn = async () => {
-  try {
-    console.log('📱 Mobile: Clock In - getting location...');
-    
-    // Get location if Cordova is available
-    let location = null;
-    if (cordovaIntegration.isCordova()) {
-      try {
-        // Try best-effort location first
-        location = await cordovaIntegration.getBestEffortLocation();
-        console.log('📍 Location obtained:', location);
-      } catch (locError) {
-        console.warn('📍 Location error:', locError);
-        // Continue without location
-      }
-    }
-    
-    console.log('📱 Calling clock in API...');
-    const result = await apiService.clockIn(location ? {
-      latitude: location.latitude,
-      longitude: location.longitude,
-      lat: location.latitude,
-      lng: location.longitude,
-      accuracy: location.accuracy,
-      location_timestamp: location.timestamp
-    } : null);
-    console.log('📱 Clock In result:', result);
-    
-    clockedIn.value = true;
-    clockInTime.value = new Date().toLocaleTimeString('en-US', { 
-      hour12: false,
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-    
-    // Vibrate feedback
-    cordovaIntegration.vibrate(100);
-    toast.success('Clocked in successfully');
-    
-  // Refresh data and status for immediate UI update
-  await loadMobileData();
-  try { await apiService.getTimeStatus(); } catch (_) {}
-  } catch (error) {
-    console.error('📱 Clock in error:', error);
-    toast.error('Failed to clock in: ' + error.message);
-  }
+  console.debug('[MobileAppWrapper] clock-in event received (handled by widget). No parent action.');
 };
 
-const handleClockOut = async (payload) => {
-  try {
-    console.log('📱 Mobile: Clock Out - getting location...');
-    // Prevent duplicate taps by marking UI state
-    const prevState = clockedIn.value;
-    clockedIn.value = false; // optimistic toggle for UI responsiveness
-    
-    // Get location if Cordova is available
-    let location = null;
-    // Prefer payload from child if provided
-    if (payload && typeof payload.latitude === 'number' && typeof payload.longitude === 'number') {
-      location = { latitude: payload.latitude, longitude: payload.longitude };
-    } else if (cordovaIntegration.isCordova()) {
-      try {
-        // Try best-effort location first
-        location = await cordovaIntegration.getBestEffortLocation();
-        console.log('📍 Location obtained:', location);
-      } catch (locError) {
-        console.warn('📍 Location error:', locError);
-      }
-    }
-    
-    console.log('📱 Calling clock out API...');
-    const finalPayload = { ...(payload || {}) };
-    if (location && typeof location.latitude === 'number' && typeof location.longitude === 'number') {
-      finalPayload.latitude = location.latitude;
-      finalPayload.longitude = location.longitude;
-      // alt keys for compatibility
-      if (finalPayload.lat === undefined) finalPayload.lat = location.latitude;
-      if (finalPayload.lng === undefined) finalPayload.lng = location.longitude;
-      if (location.accuracy != null && finalPayload.accuracy === undefined) finalPayload.accuracy = location.accuracy;
-      if (location.timestamp != null && finalPayload.location_timestamp === undefined) finalPayload.location_timestamp = location.timestamp;
-      if (finalPayload.gps_verified === undefined) finalPayload.gps_verified = true;
-    }
-    // Only send a payload if we actually have coordinates
-    const hasCoords = (typeof finalPayload.latitude === 'number' && typeof finalPayload.longitude === 'number') ||
-                      (typeof finalPayload.lat === 'number' && typeof finalPayload.lng === 'number');
-    if (!hasCoords) {
-      // avoid sending a body with only flags when no coords
-      ['gps_verified', 'accuracy', 'location_timestamp', 'lat', 'lng', 'latitude', 'longitude'].forEach(k => delete finalPayload[k]);
-    }
-    const result = await apiService.clockOut(Object.keys(finalPayload).length ? finalPayload : undefined);
-    console.log('📱 Clock Out result:', result);
-    
-    clockedIn.value = false;
-    clockInTime.value = '';
-    
-    // Vibrate feedback
-    cordovaIntegration.vibrate(200);
-    toast.success('Clocked out successfully');
-    
-    // Refresh data and status for immediate UI update
-    try { await refreshTimeStatus(); } catch (_) {}
-    await loadMobileData();
-  } catch (error) {
-    console.error('📱 Clock out error:', error);
-    const msg = String(error?.message || '').toLowerCase();
-    const friendly = msg.includes('401') ? 'Unauthorized. Please log in again.'
-                  : msg.includes('403') ? 'Permission denied to clock out.'
-                  : msg.includes('timeout') ? 'Network timeout. Check connection and try again.'
-                  : msg.includes('location') ? 'Clock out failed due to missing location. Enable GPS/permissions and try again.'
-                  : 'Unexpected error. Please try again.';
-    toast.error('Failed to clock out: ' + friendly);
-    // Revert optimistic toggle if needed
-    try { await refreshTimeStatus(); } catch (_) {}
-  }
+// NOTE: The MobileClockWidget handles API/queue for clock-out itself to support offline mode.
+// Keep this handler as a no-op to avoid duplicate records.
+const handleClockOut = async (_payload) => {
+  console.debug('[MobileAppWrapper] clock-out event received (handled by widget). No parent action.');
 };
 
 const installPWA = async () => {

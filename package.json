@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "lokijs": "^1.5.12",
     "chart.js": "^4.5.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",

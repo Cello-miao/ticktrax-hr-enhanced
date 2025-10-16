@@ -22,9 +22,9 @@
       </CardContent>
     </Card>
 
-    <div class="text-center mt-6">
+    <!-- <div class="text-center mt-6">
       <Button @click="contactSupport">Contact Support</Button>
-    </div>
+    </div> -->
   </div>
 </template>
 
@@ -33,10 +33,10 @@ import Card from '../ui/card.vue';
 import { CardContent } from '../ui/card-components.vue';
 import Button from '../ui/button.vue';
 
-const contactSupport = () => {
-  // This is a stub — in the real app you might open an email client or support chat
-  alert('Opening support channel (demo)');
-};
+// const contactSupport = () => {
+//   // This is a stub — in the real app you might open an email client or support chat
+//   alert('Opening support channel (demo)');
+// };
 </script>
 
 <style scoped>

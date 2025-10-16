@@ -54,10 +54,10 @@
             <div class="font-medium">{{ profile?.email || '—' }}</div>
           </div>
 
-          <div>
+          <!-- <div>
             <div class="text-sm text-muted-foreground">Username</div>
             <div class="font-medium">{{ profile?.username || '—' }}</div>
-          </div>
+          </div> -->
 
           <!-- <div>
             <div class="text-sm text-muted-foreground">Role</div>

@@ -54,7 +54,7 @@
       </div>
 
       <!-- Team Performance -->
-      <Card v-if="teamPerformance" class="p-4">
+      <!-- <Card v-if="teamPerformance" class="p-4">
         <h3 class="font-medium flex items-center gap-2 mb-3">
           <TrendingUp class="h-4 w-4" />
           Team Performance
@@ -69,7 +69,7 @@
             <div class="text-lg font-semibold">{{ Math.round(teamPerformance.productivity || 0) }}%</div>
           </div>
         </div>
-      </Card>
+      </Card> -->
 
       <!-- Team Members -->
       <Card class="p-4">
@@ -136,7 +136,7 @@
       </Card>
 
       <!-- Team Analytics -->
-      <Card v-if="teamAnalytics" class="p-4">
+      <!-- <Card v-if="teamAnalytics" class="p-4">
         <h3 class="font-medium flex items-center gap-2 mb-3">
           <BarChart3 class="h-4 w-4" />
           Team Analytics
@@ -151,7 +151,7 @@
             <div class="text-lg font-semibold text-orange-600">{{ formatHours(teamAnalytics.overtime_hours || 0) }}</div>
           </div>
         </div>
-      </Card>
+      </Card> -->
     </div>
   </div>
 </template>

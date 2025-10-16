@@ -65,6 +65,39 @@ class CordovaIntegration {
     console.log('✅ Cordova fully initialized');
   }
 
+  // ==================== PROGRESS INDICATOR ====================
+
+  spinner = {
+    show: (message = 'Syncing...') => {
+      try {
+        if (window.ProgressIndicator && typeof window.ProgressIndicator.showSimple === 'function') {
+          // showSimple(true) shows indeterminate spinner
+          window.ProgressIndicator.showSimple(true);
+          return;
+        }
+        if (window.ProgressIndicator && typeof window.ProgressIndicator.show === 'function') {
+          window.ProgressIndicator.show(true);
+          return;
+        }
+        // Some forks expose global ProgressIndicator without namespace
+        if (window.progressIndicator && typeof window.progressIndicator.showSimple === 'function') {
+          window.progressIndicator.showSimple(true);
+        }
+      } catch (_) {}
+    },
+    hide: () => {
+      try {
+        if (window.ProgressIndicator && typeof window.ProgressIndicator.hide === 'function') {
+          window.ProgressIndicator.hide();
+          return;
+        }
+        if (window.progressIndicator && typeof window.progressIndicator.hide === 'function') {
+          window.progressIndicator.hide();
+        }
+      } catch (_) {}
+    }
+  }
+
   // Wait until Cordova is ready (no-op in browser). Rejects after timeout.
   async waitUntilReady(timeoutMs = 8000) {
     if (!this.isCordova()) return true;

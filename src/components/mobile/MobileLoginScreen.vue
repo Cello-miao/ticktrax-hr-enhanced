@@ -95,11 +95,11 @@
           </div>
 
           <!-- Forgot Password -->
-          <div class="text-center">
+          <!-- <div class="text-center">
             <Button variant="link" class="text-sm text-muted-foreground">
               Forgot password?
             </Button>
-          </div>
+          </div> -->
         </CardContent>
       </Card>
 

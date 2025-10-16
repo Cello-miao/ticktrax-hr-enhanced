@@ -64,6 +64,7 @@ import Card from '../ui/card.vue';
 import { CardContent } from '../ui/card-components.vue';
 import Button from '../ui/button.vue';
 import { apiService } from '../../services/apiService.js';
+import { fetchTimeEntriesCached } from '../../services/offline/offlineService.js';
 import { computeAggregatesFromEntries, countDaysWorkedInMonthParis, computeWeekHistogramParis } from '../../utils/timeUtils.js';
 import { useToast } from '../ui/toast/use-toast.js';
 
@@ -123,8 +124,8 @@ const exportReport = () => {
 
 onMounted(async () => {
   try {
-    const res = await apiService.getTimeEntries({ page: 1, limit: 500 });
-    const entries = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+  const res = await fetchTimeEntriesCached({ page: 1, limit: 500 });
+  const entries = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
     const agg = computeAggregatesFromEntries(entries);
     hoursThisMonth.value = `${agg.monthHours.toFixed(1)}h`;
     daysWorked.value = countDaysWorkedInMonthParis(entries);

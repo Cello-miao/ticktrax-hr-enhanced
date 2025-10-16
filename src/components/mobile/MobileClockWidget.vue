@@ -59,6 +59,25 @@
         </div>
       </Button>
 
+      <!-- Offline queued notice -->
+      <div v-if="offlineNotice" class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+        {{ offlineNotice }}
+      </div>
+
+      <!-- Sync pending bar -->
+      <div v-if="pendingCount > 0" class="flex items-center justify-between text-xs bg-blue-50 border border-blue-200 rounded-md px-3 py-2">
+        <div class="text-blue-800">
+          Sync pending: <strong>{{ pendingCount }}</strong>
+        </div>
+        <div class="flex items-center gap-2">
+          <span v-if="!isOnlineNow" class="text-blue-600">Waiting for connection…</span>
+          <Button size="sm" variant="secondary" class="h-7 px-2 py-1" :disabled="!isOnlineNow || isFlushing" @click="syncNow">
+            <Loader2 v-if="isFlushing" class="h-3.5 w-3.5 animate-spin" />
+            <span v-else>Sync now</span>
+          </Button>
+        </div>
+      </div>
+
       <!-- Secondary Actions -->
       <!-- <div class="grid grid-cols-2 gap-3">
         <Button
@@ -191,6 +210,8 @@ import {
 } from 'lucide-vue-next';
 import { apiService } from '../../services/apiService.js';
 import cordovaIntegration from '../../services/cordovaIntegration.js';
+import { fetchTimeStatusCached, fetchTimeEntriesCached, setPendingLocalStatus } from '../../services/offline/offlineService.js';
+import { enqueueAction, flushQueue, peekQueue } from '../../services/offline/offlineQueue.js';
 
 const props = defineProps({
   // Legacy props kept for backward compatibility; component now fetches status from API
@@ -212,6 +233,7 @@ const emit = defineEmits([
 const currentTime = ref('');
 const currentDate = ref('');
 const isLoading = ref(false);
+const isFlushing = ref(false);
 const currentLocation = ref('');
 const locationVerified = ref(false);
 const locationPermission = ref('unknown'); // 'unknown' | 'granted' | 'denied'
@@ -219,6 +241,10 @@ const gpsEnabled = ref(true);
 // Persist numeric coordinates for API payloads
 const latitude = ref(null);
 const longitude = ref(null);
+// Offline UX state
+const pendingCount = ref(0);
+const offlineNotice = ref('');
+const isOnlineNow = ref(typeof navigator !== 'undefined' ? navigator.onLine : true);
 
 // Time status local state (fetched from /time-tracking/status)
 const isClockedIn = ref(false);
@@ -233,6 +259,8 @@ let timeInterval;
 let activityInterval;
 let statusInterval;
 let locationWatchId = null;
+let handleOnline = null;
+let handleOffline = null;
 
 onMounted(() => {
   updateTime();
@@ -282,6 +310,13 @@ onMounted(() => {
   // Load real recent activity from API and refresh periodically
   loadRecentActivity();
   activityInterval = setInterval(loadRecentActivity, 60_000); // refresh every minute
+
+  // Initialize pending count and online status listeners
+  updatePendingCount();
+  handleOnline = () => { isOnlineNow.value = true; updatePendingCount(); };
+  handleOffline = () => { isOnlineNow.value = false; };
+  window.addEventListener('online', handleOnline);
+  window.addEventListener('offline', handleOffline);
 });
 
 onUnmounted(() => {
@@ -298,6 +333,8 @@ onUnmounted(() => {
     try { navigator.geolocation.clearWatch(locationWatchId); } catch (_) {}
     locationWatchId = null;
   }
+  if (handleOnline) window.removeEventListener('online', handleOnline);
+  if (handleOffline) window.removeEventListener('offline', handleOffline);
 });
 
 const updateTime = () => {
@@ -405,6 +442,8 @@ const toggleClock = async () => {
   
   try {
     const prev = isClockedIn.value;
+    // Capture the exact intended click timestamp in ISO for server and local pending cache
+    const clickIso = new Date().toISOString();
     if (isClockedIn.value) {
       // Start refreshing location in background if needed (don't block clock-out)
       if (props.locationEnabled && (!latitude.value || !longitude.value)) {
@@ -412,14 +451,53 @@ const toggleClock = async () => {
       }
       // Emit payload with current (possibly last-known) location; parent will call API
       const payload = buildClockPayload();
+      // Try online first; if offline, enqueue
+      if (navigator.onLine) {
+        try { await apiService.clockOut({ ...payload, occurred_at: clickIso }); } catch (e) { enqueueAction({ type: 'CLOCK_OUT', payload: { ...payload, occurred_at: clickIso } }); setPendingLocalStatus('CLOCK_OUT', clickIso); showQueuedNotice(); }
+      } else {
+        enqueueAction({ type: 'CLOCK_OUT', payload: { ...payload, occurred_at: clickIso } });
+        setPendingLocalStatus('CLOCK_OUT', clickIso);
+        showQueuedNotice();
+      }
+      // Optimistic local toggle for offline
+      if (!navigator.onLine) {
+        isClockedIn.value = false;
+      }
       emit('clock-out', payload);
       // Optionally refresh activity in the background
       loadRecentActivity().catch(() => {});
     } else {
-      // Emit clock-in immediately (parent handles API)
+      // Emit clock-in immediately for UI; then perform or enqueue
       emit('clock-in');
+      const payload = buildClockPayload();
+      if (navigator.onLine) {
+        try { await apiService.clockIn({ ...payload, occurred_at: clickIso }); } catch (e) { enqueueAction({ type: 'CLOCK_IN', payload: { ...payload, occurred_at: clickIso } }); setPendingLocalStatus('CLOCK_IN', clickIso); showQueuedNotice(); }
+      } else {
+        enqueueAction({ type: 'CLOCK_IN', payload: { ...payload, occurred_at: clickIso } });
+        setPendingLocalStatus('CLOCK_IN', clickIso);
+        showQueuedNotice();
+      }
+      // Optimistic local toggle for offline
+      if (!navigator.onLine) {
+        isClockedIn.value = true;
+      }
     }
+    updatePendingCount();
     // Wait for server status to flip, then force a full page reload for consistency
+    // If we queued actions and we're now online, attempt a quick flush with spinner
+    try {
+      if (navigator.onLine) {
+        // Show native spinner during flush
+        try { cordovaIntegration.spinner.show('Syncing...'); } catch (_) {}
+        isFlushing.value = true;
+        await flushQueue({ showSpinner: false });
+      }
+    } catch (_) { 
+      // ignore
+    } finally {
+      isFlushing.value = false;
+      try { cordovaIntegration.spinner.hide(); } catch (_) {}
+    }
     waitForStatusChangeAndReload(prev).catch(() => {
       // Fallback: soft refresh status so UI isn't stale if reload fails
       fetchTimeStatus().catch(() => {});
@@ -431,13 +509,73 @@ const toggleClock = async () => {
   }
 };
 
+function updatePendingCount() {
+  try {
+    const q = peekQueue();
+    pendingCount.value = Array.isArray(q) ? q.length : 0;
+  } catch (_) {
+    pendingCount.value = 0;
+  }
+}
+
+let noticeTimer = null;
+function showQueuedNotice() {
+  offlineNotice.value = 'Action queued. It will sync when you are back online.';
+  if (noticeTimer) clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(() => { offlineNotice.value = ''; }, 4000);
+}
+
+async function syncNow() {
+  if (!isOnlineNow.value || isFlushing.value) return;
+  try { cordovaIntegration.spinner.show('Syncing...'); } catch (_) {}
+  isFlushing.value = true;
+  try {
+    await flushQueue({ showSpinner: false });
+    updatePendingCount();
+    await fetchTimeStatus();
+  } catch (_) {
+    // keep banner; user can retry
+  } finally {
+    isFlushing.value = false;
+    try { cordovaIntegration.spinner.hide(); } catch (_) {}
+  }
+}
+
+// Fetch current time tracking status from API
+async function fetchTimeStatus() {
+  try {
+    const { data } = await fetchTimeStatusCached();
+
+    // Determine clocked-in boolean
+    isClockedIn.value = Boolean(
+      data.is_clocked_in ?? data.clocked_in ?? (data.status === 'clocked_in') ?? false
+    );
+
+    // Extract clock-in timestamp
+    const inTs = data.clock_in_time || data.clock_in || data.started_at || data.start_time;
+    if (inTs) {
+      const d = new Date(inTs);
+      clockInAt.value = formatTime(d);
+    } else {
+      clockInAt.value = '';
+    }
+
+    // Work time today: accept seconds, minutes, or a formatted string
+    const wt = data.work_time_today ?? data.total_seconds_today ?? data.total_minutes_today;
+    workTimeTodayText.value = formatDuration(wt);
+  } catch (err) {
+    // Keep previous displayed values; optionally log
+    console.warn('Failed to fetch time status:', err);
+  }
+}
+
 // Real API: Load recent activity from /time-tracking/entries (fallback to /time/entries)
 const loadRecentActivity = async () => {
   activityLoading.value = true;
   activityError.value = '';
   try {
-    // Try to request a small page (API may ignore params; we'll still slice locally)
-    const res = await apiService.getTimeEntries({ page: 1, limit: 10 });
+    // Try cached+network hybrid
+    const res = await fetchTimeEntriesCached({ page: 1, limit: 50 });
     const list = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
 
     // Map time entries into in/out events
@@ -476,52 +614,6 @@ const formatDateLabel = (d) => {
   if (isSameDay(d, yest)) return 'Yesterday';
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
-
-// Fetch current time tracking status from API
-async function fetchTimeStatus() {
-  try {
-    const res = await apiService.getTimeStatus();
-    const data = res?.data ?? res ?? {};
-
-    // Determine clocked-in boolean
-    isClockedIn.value = Boolean(
-      data.is_clocked_in ?? data.clocked_in ?? (data.status === 'clocked_in') ?? false
-    );
-
-    // Extract clock-in timestamp
-    const inTs = data.clock_in_time || data.clock_in || data.started_at || data.start_time;
-    if (inTs) {
-      const d = new Date(inTs);
-      clockInAt.value = formatTime(d);
-    } else {
-      clockInAt.value = '';
-    }
-
-    // Work time today: accept seconds, minutes, or a formatted string
-    const wt = data.work_time_today ?? data.total_seconds_today ?? data.total_minutes_today;
-    workTimeTodayText.value = formatDuration(wt);
-  } catch (err) {
-    // Keep previous displayed values; optionally log
-    console.warn('Failed to fetch time status:', err);
-  }
-}
-
-function formatDuration(value) {
-  if (value == null) {
-    return workTimeTodayText.value || '0:00';
-  }
-  // If already a string like "1:23" or "01:23:45", return as-is
-  if (typeof value === 'string') return value;
-  // If it's a number, assume seconds if >= 3600, else minutes if < 3600 but > 120? Safer: prefer seconds, but accept minutes via heuristic flag
-  const n = Number(value);
-  if (!Number.isFinite(n) || n < 0) return '0:00';
-  // Heuristic: if n > 600, likely seconds; else could be minutes; we'll try seconds first
-  const seconds = n > 600 ? n : (n <= 24 * 60 ? n * 60 : n);
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  // Show H:MM
-  return `${h}:${String(m).padStart(2, '0')}`;
-}
 
 // Poll status until it changes from previous state, then reload the page
 async function waitForStatusChangeAndReload(prevState) {
