@@ -23,6 +23,25 @@
       </CardContent>
     </Card>
 
+    <Card class="mb-4">
+      <CardContent>
+        <h3 class="font-semibold mb-2">Hours This Week (Mon–Sun)</h3>
+        <div class="w-full overflow-x-auto">
+          <div class="min-w-[280px]">
+            <div class="relative h-56">
+              <Bar :data="chartData" :options="chartOptions" :key="chartDataKey" />
+            </div>
+            <div class="mt-3 text-xs text-muted-foreground">
+              <div v-if="weeklyHoursList.reduce((a,b)=>a+b,0) === 0">No data this week.</div>
+              <div v-else class="grid grid-cols-7 gap-2 text-center">
+                <div v-for="(h, i) in weeklyHoursList" :key="i">{{ h.toFixed(1) }}h</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+
     <!-- <div class="text-center mt-6">
       <Button @click="exportReport">Export PDF</Button>
     </div> -->
@@ -30,18 +49,72 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
+import { Bar } from 'vue-chartjs';
+import {
+  Chart as ChartJS,
+  Title,
+  Tooltip,
+  Legend,
+  BarElement,
+  CategoryScale,
+  LinearScale,
+} from 'chart.js';
 import Card from '../ui/card.vue';
 import { CardContent } from '../ui/card-components.vue';
 import Button from '../ui/button.vue';
 import { apiService } from '../../services/apiService.js';
-import { computeAggregatesFromEntries, countDaysWorkedInMonthParis } from '../../utils/timeUtils.js';
+import { computeAggregatesFromEntries, countDaysWorkedInMonthParis, computeWeekHistogramParis } from '../../utils/timeUtils.js';
 import { useToast } from '../ui/toast/use-toast.js';
+
+ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale);
 
 const { toast } = useToast();
 const hoursThisMonth = ref('0h');
 const daysWorked = ref(0);
 const notes = ref([]);
+const weeklyHoursList = ref([0,0,0,0,0,0,0]);
+
+const chartData = ref({
+  labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+  datasets: [
+    {
+      label: 'Hours',
+      data: [0, 0, 0, 0, 0, 0, 0],
+      backgroundColor: '#4f46e5',
+      borderRadius: 6,
+      barThickness: 20,
+    },
+  ],
+});
+
+const chartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { display: false },
+    title: { display: false },
+    tooltip: {
+      callbacks: {
+        label: (ctx) => `${Number(ctx.parsed.y).toFixed(2)}h`,
+      },
+    },
+  },
+  scales: {
+    x: {
+      grid: { display: false },
+    },
+    y: {
+      beginAtZero: true,
+      grid: { color: 'rgba(0,0,0,0.06)' },
+      ticks: {
+        callback: (val) => `${val}h`,
+        stepSize: 2,
+      },
+    },
+  },
+};
+const chartDataKey = computed(() => (chartData.value?.datasets?.[0]?.data || []).join(','));
 
 const exportReport = () => {
   // Hook up to reports export endpoint when ready
@@ -63,6 +136,21 @@ onMounted(async () => {
       id: e.id || i + 1,
       text: formatRecentEntry(e)
     }));
+
+    // Compute hours per day for the current week (Mon–Sun)
+    const hist = computeWeekHistogramParis(entries);
+    // Debug visibility on device
+    try { console.log('[MyReport] entries:', (entries || []).length, 'hist:', hist); } catch(_) {}
+    chartData.value = {
+      labels: hist.labels,
+      datasets: [
+        {
+          ...chartData.value.datasets[0],
+          data: hist.hours.map((h) => Number((h || 0).toFixed(2))),
+        },
+      ],
+    };
+    weeklyHoursList.value = hist.hours.map(h => Number(h || 0));
   } catch (e) {
     console.warn('[MyReport] load failed', e);
   }
@@ -94,6 +182,16 @@ function formatRecentEntry(e) {
   return `${datePart} • ${range}`;
 }
 
+function formatDateLabel(d) {
+  try {
+    if (!(d instanceof Date)) d = new Date(d);
+    if (!Number.isFinite(d.getTime())) d = new Date();
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  } catch (_) {
+    return '';
+  }
+}
+
 function formatTimeRangeText(start, end) {
   const tfmt = (val) => {
     if (!val) return null;
@@ -111,6 +209,8 @@ function formatTimeRangeText(start, end) {
   if (e) return `Out ${e}`;
   return 'No time recorded';
 }
+
+// Removed local helpers in favor of centralized utils
 </script>
 
 <style scoped>

@@ -68,9 +68,7 @@
           <HelpCenter />
         </div>
 
-        <div v-else-if="currentView === 'approvals'">
-          <Approvals />
-        </div>
+        
 
         <div v-else-if="currentView === 'alerts'">
           <Alerts />
@@ -164,7 +162,6 @@ import TimeManagement from './TimeManagement.vue';
 import MySchedule from './MySchedule.vue';
 import MyReport from './MyReport.vue';
 import HelpCenter from './HelpCenter.vue';
-import Approvals from './Approvals.vue';
 import Alerts from './Alerts.vue';
 import TeamOverview from './TeamOverview.vue';
 import EmployeeManagement from './EmployeeManagement.vue';
@@ -206,28 +203,23 @@ const tasksCompleted = ref(0);
 // PWA install
 const deferredPrompt = ref(null);
 const showInstallPrompt = ref(false);
-// Tracks whether a bottom-nav initiated refresh target was set this load
-const hasRefreshTargetInit = ref(false);
 
 onMounted(() => {
   detectMobile();
-
-  // Restore target view after a reload triggered by bottom nav BEFORE auth decides landing
+  setupPWA();
+  checkAuthState();
+  // Restore target view after a reload triggered by bottom nav
   try {
     const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('mobile.refreshTarget') : null;
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed.view === 'string') {
         currentView.value = parsed.view;
-        hasRefreshTargetInit.value = true;
       }
-      // Clear after capture; we keep an in-memory flag to avoid overrides
+      // clear after use
       localStorage.removeItem('mobile.refreshTarget');
     }
   } catch (_) {}
-
-  setupPWA();
-  checkAuthState();
   
   // Listen for orientation changes
   window.addEventListener('orientationchange', detectMobile);
@@ -281,8 +273,7 @@ const checkAuthState = async () => {
       // If no explicit refresh target set this session and currentView is still the default,
       // prefer showing Employees for admin users; otherwise keep existing behavior.
       try {
-        // Respect explicit navigation intent (e.g., bottom nav Home/Clock) during this load
-        const hasRefreshTarget = hasRefreshTargetInit.value === true;
+        const hasRefreshTarget = typeof localStorage !== 'undefined' && localStorage.getItem('mobile.refreshTarget');
         const roleLc = String(user.value.role || '').toLowerCase();
         if (!hasRefreshTarget && (!currentView.value || currentView.value === 'dashboard')) {
           if (roleLc === 'admin' || roleLc === 'hr' || roleLc === 'human resources') {

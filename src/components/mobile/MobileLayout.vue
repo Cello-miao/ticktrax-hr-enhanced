@@ -165,9 +165,7 @@ const sidebarOpen = ref(false);
 const adminMenuItems = [
   //{ icon: Home, label: "Dashboard", id: "dashboard", shortLabel: "Home" },
   { icon: Users, label: "Employee Management", id: "employees", shortLabel: "Staff" },
-  { icon: TrendingUp, label: "Analytics", id: "analytics", shortLabel: "Analytics" },
-  //{ icon: Settings, label: "Settings", id: "settings", shortLabel: "Settings" },
-  //{ icon: HelpCircle, label: "Help Center", id: "help", shortLabel: "Help" },
+  { icon: TrendingUp, label: "Analytics", id: "analytics", shortLabel: "Analytics" }
 ];
 
 const roleConfig = {
@@ -175,10 +173,9 @@ const roleConfig = {
     title: "Employee Portal",
     icon: Clock,
     menuItems: [
-      { icon: Home, label: "Dashboard", id: "dashboard", shortLabel: "Home" },
+      //{ icon: Home, label: "Dashboard", id: "dashboard", shortLabel: "Home" },
       { icon: Clock, label: "Clock In/Out", id: "clock", shortLabel: "Clock" },
       { icon: FileText, label: "Time Management", id: "timesheet", shortLabel: "Time" },
-      { icon: Calendar, label: "My Schedule", id: "schedule", shortLabel: "Schedule" },
       { icon: TrendingUp, label: "My Reports", id: "reports", shortLabel: "Reports" },
       { icon: HelpCircle, label: "Help Center", id: "help", shortLabel: "Help" },
     ],
@@ -188,9 +185,9 @@ const roleConfig = {
     icon: Users,
     menuItems: [
       { icon: Home, label: "Dashboard", id: "dashboard", shortLabel: "Home" },
+      { icon: TrendingUp, label: "Reports", id: "reports", shortLabel: "Reports" },
       { icon: Users, label: "Team Overview", id: "team", shortLabel: "Team" },
       //{ icon: FileText, label: "Approvals", id: "approvals", shortLabel: "Approvals" },
-      { icon: TrendingUp, label: "Reports", id: "reports", shortLabel: "Reports" },
       //{ icon: Bell, label: "Alerts", id: "alerts", shortLabel: "Alerts" },
       //{ icon: HelpCircle, label: "Help Center", id: "help", shortLabel: "Help" },
     ],

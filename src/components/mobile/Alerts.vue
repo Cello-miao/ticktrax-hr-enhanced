@@ -34,23 +34,23 @@ import { useToast } from '../ui/toast/use-toast.js';
 const { toast } = useToast();
 const alertItems = ref([]);
 
-const refresh = async () => {
-  try {
-    const res = await apiService.listNotifications({ page: 1, limit: 20 }).catch(() => ({ data: [] }));
-    const arr = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
-    alertItems.value = arr.map((n) => ({
-      id: n.id,
-      title: n.title || n.message || 'Notification',
-      time: n.created_at || n.time || '',
-      severity: (n.severity || n.level || 'Info').toString()
-    }));
-  } catch (e) {
-    console.warn('[Alerts] refresh failed', e);
-    toast.error('Failed to load alerts');
-  }
-};
+// const refresh = async () => {
+//   try {
+//     const res = await apiService.listNotifications({ page: 1, limit: 20 }).catch(() => ({ data: [] }));
+//     const arr = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+//     alertItems.value = arr.map((n) => ({
+//       id: n.id,
+//       title: n.title || n.message || 'Notification',
+//       time: n.created_at || n.time || '',
+//       severity: (n.severity || n.level || 'Info').toString()
+//     }));
+//   } catch (e) {
+//     console.warn('[Alerts] refresh failed', e);
+//     toast.error('Failed to load alerts');
+//   }
+// };
 
-onMounted(() => { refresh(); });
+// onMounted(() => { refresh(); });
 </script>
 
 <style scoped>

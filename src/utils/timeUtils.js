@@ -154,3 +154,64 @@ function getParisOffsetHoursForDate(date) {
     return 1; // default Paris offset if parsing fails
   }
 }
+
+// Compute a Monday-start week histogram (Mon..Sun) of hours for the given entries in Paris TZ.
+// Returns: { labels: ['Mon',...,'Sun'], hours: [h0..h6] }
+export function computeWeekHistogramParis(entries, now = new Date()) {
+  const list = Array.isArray(entries?.data) ? entries.data : (Array.isArray(entries) ? entries : []);
+  const { weekStart } = getWeekStartParis(now);
+  // Build Paris day boundaries for each day in the week
+  const dayBounds = [];
+  const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  for (let i = 0; i < 7; i++) {
+    // Use midday to compute the correct DST offset for that calendar day in Paris
+    const middayParisLocal = new Date(Date.UTC(weekStart.year, weekStart.month - 1, weekStart.day + i, 12, 0, 0));
+    const off = getParisOffsetHoursForDate(middayParisLocal);
+    const startUtcMs = Date.UTC(weekStart.year, weekStart.month - 1, weekStart.day + i, 0, 0, 0) - off * 3600000;
+    // end is next day's midnight in Paris
+    const nextMiddayParisLocal = new Date(Date.UTC(weekStart.year, weekStart.month - 1, weekStart.day + i + 1, 12, 0, 0));
+    const offNext = getParisOffsetHoursForDate(nextMiddayParisLocal);
+    const endUtcMs = Date.UTC(weekStart.year, weekStart.month - 1, weekStart.day + i + 1, 0, 0, 0) - offNext * 3600000;
+    dayBounds.push({ startMs: startUtcMs, endMs: endUtcMs });
+  }
+
+  const hours = Array(7).fill(0);
+
+  for (const e of list) {
+    const { start, end } = getEntryTimes(e);
+    const duration = getEntryDurationHours(e);
+    const hasInterval = start && (end || true);
+    const effStart = start || (end ? new Date(end) : null);
+    const effEnd = end || (start ? new Date() : null);
+
+    if (effStart && effEnd && effEnd.getTime() > effStart.getTime()) {
+      const sMs = effStart.getTime();
+      const eMs = effEnd.getTime();
+      // Skip if completely outside the week
+      if (eMs < dayBounds[0].startMs || sMs > dayBounds[6].endMs) continue;
+      for (let i = 0; i < 7; i++) {
+        const { startMs, endMs } = dayBounds[i];
+        const overlap = Math.max(0, Math.min(eMs, endMs) - Math.max(sMs, startMs));
+        if (overlap > 0) hours[i] += overlap / 3600000;
+      }
+      continue;
+    }
+
+    // Fallback: if we have a duration but no usable timestamps, allocate to the ref day
+    if (duration > 0) {
+      const ref = start || end || (e.updated_at ? new Date(e.updated_at) : (e.created_at ? new Date(e.created_at) : null));
+      if (ref && isFinite(ref.getTime())) {
+        const t = ref.getTime();
+        for (let i = 0; i < 7; i++) {
+          const { startMs, endMs } = dayBounds[i];
+          if (t >= startMs && t < endMs) {
+            hours[i] += duration;
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  return { labels, hours };
+}

@@ -9,10 +9,10 @@
             <div class="text-3xl font-bold">{{ totalHours }}</div>
             <div class="text-sm text-muted-foreground">Hours This Week</div>
           </div>
-          <!-- <div>
-            <div class="text-3xl font-bold">{{ overtimeHours }}</div>
-            <div class="text-sm text-muted-foreground">Overtime</div>
-          </div> -->
+          <div>
+            <div class="text-3xl font-bold">{{ todayHours }}</div>
+            <div class="text-sm text-muted-foreground">Hours Today</div>
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -33,10 +33,6 @@
         </ul>
       </CardContent>
     </Card>
-
-    <div class="text-center mt-6">
-      <Button @click="requestAdjustment">Request Time Adjustment</Button>
-    </div>
   </div>
 </template>
 
@@ -49,6 +45,7 @@ import { apiService } from '../../services/apiService.js';
 import { computeAggregatesFromEntries } from '../../utils/timeUtils.js';
 
 const totalHours = ref('0.0');
+const todayHours = ref('0.0');
 const overtimeHours = ref('0.0');
 const recentEntries = ref([]);
 const loading = ref(false);
@@ -76,9 +73,10 @@ async function loadTimeData() {
     mapped.sort((a, b) => (b._startMs || 0) - (a._startMs || 0));
     recentEntries.value = mapped.slice(0, 10).map(({ _startMs, _endMs, ...rest }) => rest);
 
-    // Compute weekly total from entries (Europe/Paris, Mon-Sun)
-    const agg = computeAggregatesFromEntries(entries);
-    totalHours.value = agg.weekHours.toFixed(1);
+  // Compute weekly and today's totals from entries (Europe/Paris, Mon-Sun)
+  const agg = computeAggregatesFromEntries(entries);
+  totalHours.value = agg.weekHours.toFixed(1);
+  todayHours.value = (Number(agg.todayHours || 0)).toFixed(1);
 
     // Overtime: try analytics endpoint, fallback to totalHours - 40
     try {
@@ -91,7 +89,8 @@ async function loadTimeData() {
       );
       overtimeHours.value = val.toFixed(1);
     } catch (e) {
-      overtimeHours.value = Math.max(0, weekHours - 40).toFixed(1);
+      // Fallback: overtime as weekly hours beyond 40
+      overtimeHours.value = Math.max(0, (Number(agg?.weekHours || 0)) - 40).toFixed(1);
     }
   } catch (e) {
     console.error('Failed to load time data:', e);

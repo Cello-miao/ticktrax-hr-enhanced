@@ -10,13 +10,13 @@
             <div class="font-medium">How do I clock in?</div>
             <div>Open the Time Clock and press the Clock In button.</div>
           </li>
-          <li>
+          <!-- <li>
             <div class="font-medium">How do I request time off?</div>
             <div>Go to My Schedule and tap Request Time Off.</div>
-          </li>
+          </li> -->
           <li>
             <div class="font-medium">Who do I contact for support?</div>
-            <div>Email support@example.com or use the button below.</div>
+            <div>Email ticktrax@example.com.</div>
           </li>
         </ul>
       </CardContent>

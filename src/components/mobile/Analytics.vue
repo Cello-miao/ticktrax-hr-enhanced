@@ -32,7 +32,7 @@
     <div v-else class="space-y-4">
       <!-- Overview Stats: only two numbers required -->
       <div class="grid grid-cols-2 gap-4">
-        <Card class="p-4">
+        <Card class="p-4 width_class">
           <div class="flex items-center gap-2">
             <Users class="h-5 w-5 text-blue-500" />
             <h3 class="font-medium">Total Employees</h3>
@@ -43,7 +43,7 @@
           <div class="text-xs text-muted-foreground">All employees</div>
         </Card>
 
-        <Card class="p-4">
+        <Card class="p-4 width_class">
           <div class="flex items-center gap-2">
             <Clock class="h-5 w-5 text-green-500" />
             <h3 class="font-medium">Clocked In Today</h3>
@@ -245,7 +245,7 @@ const loadOverview = async () => {
 // Calculate today's stats; we derive clocked-in-today count here
 const calculateTodayStats = async () => {
   try {
-    console.debug('[Analytics] Calculating today\'s stats (active users + avg hours)...');
+  console.debug('[Analytics] Calculating today\'s stats from /working_times ...');
 
     // Compute local-day range [startOfDay, startOfNextDay)
     const now = new Date();
@@ -256,39 +256,33 @@ const calculateTodayStats = async () => {
     const startDate = startOfDay.toISOString().split('T')[0];
     const endDate = endOfDay.toISOString().split('T')[0];
 
-    console.debug('[Analytics] Fetching /time-tracking/entries with params:', { start_date: startDate, end_date: endDate });
+    // Fetch working times (no guaranteed server-side filtering; filter client-side for today)
+    const response = await apiService.listWorkingTimes();
 
-    // Fetch entries strictly within today (backend interprets [start_date, end_date))
-    const response = await apiService.getTimeEntries({
-      start_date: startDate,
-      end_date: endDate,
-      limit: 2000
-    });
+    const wtRaw = response?.data || response || [];
+    const workingTimes = Array.isArray(wtRaw) ? wtRaw : (Array.isArray(wtRaw?.items) ? wtRaw.items : []);
 
-    const entriesRaw = response?.data || response || [];
-    const entries = Array.isArray(entriesRaw) ? entriesRaw : (Array.isArray(entriesRaw?.entries) ? entriesRaw.entries : []);
+    console.debug('[Analytics] Working times fetched:', workingTimes.length);
 
-    console.debug('[Analytics] Entries fetched for today:', entries.length);
-
-    // Helper to extract a consistent user id
-    const getUserId = (e) => e.user_id || e.userId || e.userID || e.user?.id || e.uid || null;
-    const getClockInTs = (e) => e.clock_in || e.clock_in_time || e.clockIn || e.start_time || e.started_at || e.startedAt || null;
-    const getClockOutTs = (e) => e.clock_out || e.clock_out_time || e.clockOut || e.end_time || e.ended_at || e.endedAt || null;
+    // Helper to extract fields in a tolerant way
+    const getUserId = (e) => e.user_id || e.userId || e.userID || e.user?.id || e.uid || e.employee_id || null;
+    const getStartTs = (e) => e.start_time || e.start || e.clock_in || e.clock_in_time || e.started_at || e.startedAt || null;
+    const getEndTs = (e) => e.end_time || e.end || e.clock_out || e.clock_out_time || e.ended_at || e.endedAt || null;
 
     const uniqueUsers = new Set(); // users with any overlap today
     const minutesByUser = new Map(); // total overlapped minutes per user
-    const hasClockInToday = new Map(); // uid -> boolean
+    const hasClockInToday = new Map(); // uid -> boolean (start within today)
     const windowStart = startOfDay.getTime();
     const windowEnd = Math.min(endOfDay.getTime(), now.getTime());
 
-    for (const entry of entries) {
-      const cin = getClockInTs(entry);
+    for (const wt of workingTimes) {
+      const cin = getStartTs(wt);
       if (!cin) continue; // skip malformed entries with no start
       const cinMs = new Date(cin).getTime();
-      const uid = getUserId(entry);
+      const uid = getUserId(wt);
       if (uid == null) continue;
 
-      const cout = getClockOutTs(entry);
+      const cout = getEndTs(wt);
       const coutMs = cout ? new Date(cout).getTime() : windowEnd; // ongoing entries end at now (capped by day end)
 
       // compute overlap within today's window; count as active if any overlap
@@ -428,4 +422,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.width_class {
+  width: 100%;
+}
 </style>
