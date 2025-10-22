@@ -4,7 +4,7 @@ import { apiService } from '../apiService.js';
 import { setPendingLocalStatus, setCachedTimeStatus, upsertTimeEntries } from './offlineService.js';
 
 const STORAGE_KEY = 'offline.queue.v1';
-
+// Load the queue from localStorage
 function loadQueue() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -16,12 +16,14 @@ function loadQueue() {
   }
 }
 
+// Save the queue to localStorage
 function saveQueue(queue) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(queue));
   } catch (_) {}
 }
 
+// Enqueue a new offline action
 export function enqueueAction(action) {
   // action: { type: string, endpoint?: string, method?: 'POST'|'PUT'|'DELETE'|'PATCH', payload?: any, meta?: any }
   const q = loadQueue();
@@ -34,6 +36,7 @@ export function enqueueAction(action) {
   }
 }
 
+// Dequeue the oldest action
 export function dequeueAction() {
   const q = loadQueue();
   const item = q.shift();
@@ -41,14 +44,17 @@ export function dequeueAction() {
   return item;
 }
 
+// Peek at the current queue without modifying it
 export function peekQueue() {
   return loadQueue();
 }
 
+// Clear the entire queue
 export function clearQueue() {
   saveQueue([]);
 }
 
+// Flush the offline action queue by executing each action in order.
 export async function flushQueue({ showSpinner = true } = {}) {
   // Spinner via cordova-plugin-progress-indicator
   const spinner = getSpinner();
@@ -71,6 +77,7 @@ export async function flushQueue({ showSpinner = true } = {}) {
   }
 }
 
+// Execute a single offline action item
 async function executeAction(item) {
   const { type, payload, endpoint, method } = item || {};
   // Map known types to apiService calls; fall back to generic request
