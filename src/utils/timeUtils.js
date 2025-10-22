@@ -3,6 +3,7 @@
 
 export const PARIS_TZ = 'Europe/Paris';
 
+// 格式化器：用于把 Date 拆分成年、月、日、星期
 const fmtParis = new Intl.DateTimeFormat('fr-FR', {
   timeZone: PARIS_TZ,
   year: 'numeric',
@@ -22,6 +23,7 @@ function toParisParts(date) {
   return { year, month, day, weekday };
 }
 
+// 星期名转数字索引（以星期一为0）
 function weekdayIndexMonday0(weekday) {
   const norm = weekday.replace(/\.$/, '');
   const map = { 'lun': 0, 'mar': 1, 'mer': 2, 'jeu': 3, 'ven': 4, 'sam': 5, 'dim': 6 };
@@ -29,16 +31,19 @@ function weekdayIndexMonday0(weekday) {
 }
 
 // Convert year, month, day to a comparable key: YYYYMMDD
+// 生成日期键，用于比较或去重
 function toKey({ year, month, day }) {
   return (year * 10000) + (month * 100) + day;
 }
 
 // Get number of days in month m of year y
+// 获取某月天数
 function daysInMonth(y, m) {
   return new Date(y, m, 0).getDate(); // m: 1..12
 }
 
 // Get the Paris week start (Monday) for the week containing 'now'
+// 获取指定日期所在周的“周一”日期（巴黎时区）
 function getWeekStartParis(now) {
   const nowParts = toParisParts(now);
   const dow = weekdayIndexMonday0(nowParts.weekday);
@@ -53,6 +58,7 @@ function getWeekStartParis(now) {
   return { weekStart: { year: wy, month: wm, day: wd }, nowParts };
 }
 
+// 从打卡记录中提取开始和结束时间
 function getEntryTimes(entry) {
   const startTs = entry.clock_in || entry.clock_in_time || entry.start_time || entry.started_at || entry.start_date;
   const endTs = entry.clock_out || entry.clock_out_time || entry.end_time || entry.ended_at;
@@ -61,6 +67,7 @@ function getEntryTimes(entry) {
   return { start, end };
 }
 
+// 计算单条记录的时长（小时）
 function getEntryDurationHours(entry) {
   let hours = Number(entry.duration_hours || entry.hours || 0);
   if (!isFinite(hours)) hours = 0;
@@ -76,6 +83,7 @@ function getEntryDurationHours(entry) {
   return hours || 0;
 }
 
+// 从多条打卡记录中计算汇总（当天、本周、本月）
 export function computeAggregatesFromEntries(entries, now = new Date()) {
   const list = Array.isArray(entries?.data) ? entries.data : (Array.isArray(entries) ? entries : []);
   const { weekStart, nowParts } = getWeekStartParis(now);
@@ -96,7 +104,7 @@ export function computeAggregatesFromEntries(entries, now = new Date()) {
     const entryRef = start || end; // classify by start if available
     if (!entryRef) continue;
 
-    const hours = getEntryDurationHours(entry);
+    const hours = getEntryDurationHours(entry); 
 
     const ep = toParisParts(entryRef);
     const eKey = toKey(ep);
@@ -123,6 +131,7 @@ export function computeAggregatesFromEntries(entries, now = new Date()) {
   };
 }
 
+// 计算当月工作过的天数（以巴黎时区为准）
 export function countDaysWorkedInMonthParis(entries, now = new Date()) {
   const list = Array.isArray(entries?.data) ? entries.data : (Array.isArray(entries) ? entries : []);
   const parts = toParisParts(now);
@@ -161,6 +170,7 @@ function getParisOffsetHoursForDate(date) {
 
 // Compute a Monday-start week histogram (Mon..Sun) of hours for the given entries in Paris TZ.
 // Returns: { labels: ['Mon',...,'Sun'], hours: [h0..h6] }
+// 生成本周每天的工时直方图（星期一至星期日）
 export function computeWeekHistogramParis(entries, now = new Date()) {
   const list = Array.isArray(entries?.data) ? entries.data : (Array.isArray(entries) ? entries : []);
   const { weekStart } = getWeekStartParis(now);
