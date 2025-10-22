@@ -2,7 +2,7 @@
   <div class="p-4">
     <h2 class="text-2xl font-bold mb-4">Approvals</h2>
 
-    <Card class="mb-4">
+    <!-- <Card class="mb-4">
       <CardContent>
         <div class="text-sm text-muted-foreground mb-3">Pending approvals for your review</div>
         <ul class="space-y-3">
@@ -22,7 +22,7 @@
 
     <div class="text-center mt-6">
       <Button @click="loadMore">Load more</Button>
-    </div>
+    </div> -->
   </div>
 </template>
 

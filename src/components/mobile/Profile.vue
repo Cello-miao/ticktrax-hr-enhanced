@@ -137,7 +137,7 @@
     </div>
 
     <!-- Edit Profile Dialog -->
-    <Dialog v-model:open="showEditProfile">
+    <!-- <Dialog v-model:open="showEditProfile">
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Edit Profile</DialogTitle>
@@ -195,10 +195,10 @@
           </DialogFooter>
         </form>
       </DialogContent>
-    </Dialog>
+    </Dialog> -->
 
     <!-- Change Password Dialog -->
-    <Dialog v-model:open="showChangePassword">
+    <!-- <Dialog v-model:open="showChangePassword">
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Change Password</DialogTitle>
@@ -248,7 +248,7 @@
           </DialogFooter>
         </form>
       </DialogContent>
-    </Dialog>
+    </Dialog> -->
   </div>
 </template>
 

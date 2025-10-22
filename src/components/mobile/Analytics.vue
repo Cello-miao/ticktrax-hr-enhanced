@@ -54,117 +54,6 @@
           <div class="text-xs text-muted-foreground">clock-in today</div>
         </Card>
       </div>
-
-      <!-- Productivity Metrics -->
-      <!-- <Card class="p-4">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="font-medium flex items-center gap-2">
-            <TrendingUp class="h-4 w-4" />
-            Productivity Metrics
-          </h3>
-          <Select v-model="productivityPeriod" @update:model-value="loadProductivityMetrics">
-            <SelectTrigger class="w-32">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="daily">Daily</SelectItem>
-              <SelectItem value="weekly">Weekly</SelectItem>
-              <SelectItem value="monthly">Monthly</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        
-        <div v-if="productivityLoading" class="flex items-center justify-center py-4">
-          <Loader2 class="h-6 w-6 animate-spin" />
-        </div>
-        
-        <div v-else-if="productivity" class="grid grid-cols-2 gap-4">
-          <div>
-            <div class="text-sm text-muted-foreground">Average Hours</div>
-            <div class="text-lg font-semibold">{{ formatHours(productivity.average_hours || 0) }}</div>
-          </div>
-          
-        </div>
-      </Card> -->
-
-      <!-- Team Performance -->
-      <!-- <Card class="p-4">
-        <h3 class="font-medium flex items-center gap-2 mb-4">
-          <Users class="h-4 w-4" />
-          Team Performance
-        </h3>
-        
-        <div v-if="teamPerformanceLoading" class="flex items-center justify-center py-4">
-          <Loader2 class="h-6 w-6 animate-spin" />
-        </div>
-        
-        <div v-else-if="teamPerformance?.length" class="space-y-3">
-          <div 
-            v-for="team in teamPerformance.slice(0, 5)" 
-            :key="team.team_id || team.name"
-            class="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
-          >
-            <div>
-              <div class="font-medium">{{ team.team_name || team.name || 'Unknown Team' }}</div>
-              <div class="text-sm text-muted-foreground">{{ team.member_count || 0 }} members</div>
-            </div>
-            <div class="text-right">
-              <div class="font-semibold">{{ formatHours(team.total_hours || 0) }}</div>
-              <div class="text-xs text-muted-foreground">total hours</div>
-            </div>
-          </div>
-        </div>
-        
-        <div v-else class="text-center py-4 text-muted-foreground">
-          No team performance data available
-        </div>
-      </Card> -->
-
-      <!-- Attendance Analytics -->
-      <!-- <Card class="p-4">
-        <h3 class="font-medium flex items-center gap-2 mb-4">
-          <Calendar class="h-4 w-4" />
-          Attendance Analytics
-        </h3>
-        
-        <div v-if="attendanceLoading" class="flex items-center justify-center py-4">
-          <Loader2 class="h-6 w-6 animate-spin" />
-        </div>
-        
-        <div v-else-if="attendance" class="grid grid-cols-2 gap-4">
-          <div>
-            <div class="text-sm text-muted-foreground">Attendance Rate</div>
-            <div class="text-lg font-semibold">{{ Math.round(attendance.attendance_rate || 0) }}%</div>
-          </div>
-          <div>
-            <div class="text-sm text-muted-foreground">Punctuality</div>
-            <div class="text-lg font-semibold">{{ Math.round(attendance.punctuality_rate || 0) }}%</div>
-          </div>
-        </div>
-      </Card> -->
-
-      <!-- Overtime Analytics -->
-      <!-- <Card class="p-4">
-        <h3 class="font-medium flex items-center gap-2 mb-4">
-          <Clock class="h-4 w-4" />
-          Overtime Analytics
-        </h3>
-        
-        <div v-if="overtimeLoading" class="flex items-center justify-center py-4">
-          <Loader2 class="h-6 w-6 animate-spin" />
-        </div>
-        
-        <div v-else-if="overtime" class="grid grid-cols-2 gap-4">
-          <div>
-            <div class="text-sm text-muted-foreground">Overtime Hours</div>
-            <div class="text-lg font-semibold text-orange-600">{{ formatHours(overtime.total_overtime || 0) }}</div>
-          </div>
-          <div>
-            <div class="text-sm text-muted-foreground">Overtime Rate</div>
-            <div class="text-lg font-semibold">{{ Math.round(overtime.overtime_rate || 0) }}%</div>
-          </div>
-        </div>
-      </Card> -->
     </div>
   </div>
 </template>
@@ -174,49 +63,15 @@ console.debug('[Analytics] module loaded');
 import { ref, onMounted, computed } from 'vue';
 import Card from '../ui/card.vue';
 import Button from '../ui/button.vue';
-import Select, { SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select.vue';
 import { 
   RefreshCw, Loader2, AlertCircle, Users, Clock, TrendingUp, Calendar 
 } from 'lucide-vue-next';
 import { apiService } from '../../services/apiService.js';
-import { toast } from '../../utils/toast.js';
 
 // Reactive state
 const overview = ref(null);
-const productivity = ref(null);
-const teamPerformance = ref([]);
-const attendance = ref(null);
-const overtime = ref(null);
-
 const loading = ref(false);
-const productivityLoading = ref(false);
-const teamPerformanceLoading = ref(false);
-const attendanceLoading = ref(false);
-const overtimeLoading = ref(false);
 const error = ref('');
-
-// Period selection
-const productivityPeriod = ref('weekly');
-
-// Computed properties
-const hasData = computed(() => {
-  return overview.value || productivity.value || teamPerformance.value.length > 0 || attendance.value || overtime.value;
-});
-
-// Utility functions
-const formatHours = (hours) => {
-  if (typeof hours !== 'number') return '0h';
-  if (hours < 1) return `${Math.round(hours * 60)}m`;
-  return `${Math.round(hours * 10) / 10}h`;
-};
-
-const formatDate = (date) => {
-  return new Date(date).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  });
-};
 
 // Load analytics overview
 const loadOverview = async () => {
@@ -312,84 +167,6 @@ const calculateTodayStats = async () => {
   }
 };
 
-// Load productivity metrics
-const loadProductivityMetrics = async () => {
-  productivityLoading.value = true;
-  try {
-    console.debug('[Analytics] Loading productivity metrics...', productivityPeriod.value);
-    const response = await apiService.getProductivityMetrics({ 
-      period: productivityPeriod.value 
-    });
-    productivity.value = response?.data || response;
-    console.debug('[Analytics] Productivity loaded:', productivity.value);
-  } catch (err) {
-    console.error('[Analytics] Error loading productivity:', err);
-    // Don't show error for productivity as it's not critical
-  } finally {
-    productivityLoading.value = false;
-  }
-};
-
-// Load team performance
-const loadTeamPerformance = async () => {
-  teamPerformanceLoading.value = true;
-  try {
-    console.debug('[Analytics] Loading team performance...');
-    const response = await apiService.getTeamPerformance();
-    const data = response?.data || response;
-    teamPerformance.value = Array.isArray(data) ? data : [];
-    console.debug('[Analytics] Team performance loaded:', teamPerformance.value.length, 'teams');
-  } catch (err) {
-    console.error('[Analytics] Error loading team performance:', err);
-    teamPerformance.value = [];
-  } finally {
-    teamPerformanceLoading.value = false;
-  }
-};
-
-// Load attendance analytics
-const loadAttendanceAnalytics = async () => {
-  attendanceLoading.value = true;
-  try {
-    console.debug('[Analytics] Loading attendance analytics...');
-    
-    // Get date range for current month
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    
-    const response = await apiService.getAttendanceAnalytics({
-      start_date: startOfMonth.toISOString().split('T')[0],
-      end_date: endOfMonth.toISOString().split('T')[0]
-    });
-    attendance.value = response?.data || response;
-    console.debug('[Analytics] Attendance loaded:', attendance.value);
-  } catch (err) {
-    console.error('[Analytics] Error loading attendance:', err);
-    // Don't show error for attendance as it's not critical
-  } finally {
-    attendanceLoading.value = false;
-  }
-};
-
-// Load overtime analytics
-const loadOvertimeAnalytics = async () => {
-  overtimeLoading.value = true;
-  try {
-    console.debug('[Analytics] Loading overtime analytics...');
-    const response = await apiService.getOvertimeAnalytics({ 
-      period: 'monthly' 
-    });
-    overtime.value = response?.data || response;
-    console.debug('[Analytics] Overtime loaded:', overtime.value);
-  } catch (err) {
-    console.error('[Analytics] Error loading overtime:', err);
-    // Don't show error for overtime as it's not critical
-  } finally {
-    overtimeLoading.value = false;
-  }
-};
-
 // Load all analytics data
 const loadAnalytics = async () => {
   loading.value = true;
@@ -407,11 +184,6 @@ const loadAnalytics = async () => {
   } finally {
     loading.value = false;
   }
-};
-
-// Refresh analytics
-const refreshAnalytics = () => {
-  loadAnalytics();
 };
 
 // Initialize component
