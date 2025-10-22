@@ -9,14 +9,14 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      '@': path.resolve(__dirname, './src'), // allows using '@' as an alias for 'src' directory
       'vue': 'vue/dist/vue.esm-bundler.js',
     },
   },
   build: {
-    target: 'esnext',
-    outDir: 'build',
-    sourcemap: true,
+    target: 'esnext', // Target modern browsers
+    outDir: 'build', // Output directory for the build
+    sourcemap: true, // Enable source maps for easier debugging
   },
   server: {
     port: 3000,

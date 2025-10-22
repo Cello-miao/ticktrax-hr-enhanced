@@ -68,8 +68,6 @@
           <HelpCenter />
         </div>
 
-        
-
         <div v-else-if="currentView === 'alerts'">
           <Alerts />
         </div>
@@ -205,7 +203,7 @@ const deferredPrompt = ref(null);
 const showInstallPrompt = ref(false);
 
 onMounted(() => {
-  detectMobile();
+  detectMobile(); // initial detection
   setupPWA();
   checkAuthState();
   // Restore target view after a reload triggered by bottom nav
@@ -245,6 +243,7 @@ const detectMobile = () => {
     /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
 };
 
+// Setup PWA install prompt handling
 const setupPWA = () => {
   // Listen for PWA install prompt
   window.addEventListener('beforeinstallprompt', (e) => {
@@ -436,46 +435,46 @@ const updateCurrentView = (view) => {
   }
 
   // If the dashboard is being set programmatically (not user-intent), trace the call origin
-  if (view === 'dashboard' && currentView.value && currentView.value !== 'dashboard') {
-    console.debug('[MobileAppWrapper] dashboard set programmatically? prev=', currentView.value, 'now=', now, 'lastSet=', lastSet.value);
-    const err = new Error('[MobileAppWrapper] dashboard set - stack');
-    console.error('[MobileAppWrapper] dashboard set programmatically. Stack below:');
-    console.error(err.stack);
-    // Also emit a console.trace for richer information in Chromium logcat
-    try {
-      console.trace();
-    } catch (traceErr) {
-      // ignore if console.trace is not available
-    }
-    // Expose the stack on window so it can be inspected from DevTools or other runtime probes
-    if (typeof window !== 'undefined') {
-      try {
-        window.__lastDashboardStack = err.stack;
-      } catch (werr) {
-        // ignore write errors
-      }
-    }
-    // Also persist to localStorage (so we can read it later if console gets noisy)
-    try {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem('__lastDashboardStack', err.stack || '[no-stack]');
-        // Print a short slice so logcat shows the most relevant top frames
-        const stackLines = (err.stack || '').split('\n');
-        console.error('[MobileAppWrapper] stack-snippet:', stackLines.slice(0,6).join(' | '));
-        // Print top lines individually for clearer visibility in logcat
-        stackLines.slice(0,8).forEach((ln, idx) => {
-          console.error(`[MobileAppWrapper] stack-line[${idx}] ${ln}`);
-        });
-        try {
-          localStorage.setItem('__lastDashboardStackLines', JSON.stringify(stackLines.slice(0,20)));
-        } catch (sErr) {
-          // ignore
-        }
-      }
-    } catch (lsErr) {
-      // ignore storage errors
-    }
-  }
+  // if (view === 'dashboard' && currentView.value && currentView.value !== 'dashboard') {
+  //   console.debug('[MobileAppWrapper] dashboard set programmatically? prev=', currentView.value, 'now=', now, 'lastSet=', lastSet.value);
+  //   const err = new Error('[MobileAppWrapper] dashboard set - stack');
+  //   console.error('[MobileAppWrapper] dashboard set programmatically. Stack below:');
+  //   console.error(err.stack);
+  //   // Also emit a console.trace for richer information in Chromium logcat
+  //   try {
+  //     console.trace();
+  //   } catch (traceErr) {
+  //     // ignore if console.trace is not available
+  //   }
+  //   // Expose the stack on window so it can be inspected from DevTools or other runtime probes
+  //   if (typeof window !== 'undefined') {
+  //     try {
+  //       window.__lastDashboardStack = err.stack;
+  //     } catch (werr) {
+  //       // ignore write errors
+  //     }
+  //   }
+  //   // Also persist to localStorage (so we can read it later if console gets noisy)
+  //   try {
+  //     if (typeof localStorage !== 'undefined') {
+  //       localStorage.setItem('__lastDashboardStack', err.stack || '[no-stack]');
+  //       // Print a short slice so logcat shows the most relevant top frames
+  //       const stackLines = (err.stack || '').split('\n');
+  //       console.error('[MobileAppWrapper] stack-snippet:', stackLines.slice(0,6).join(' | '));
+  //       // Print top lines individually for clearer visibility in logcat
+  //       stackLines.slice(0,8).forEach((ln, idx) => {
+  //         console.error(`[MobileAppWrapper] stack-line[${idx}] ${ln}`);
+  //       });
+  //       try {
+  //         localStorage.setItem('__lastDashboardStackLines', JSON.stringify(stackLines.slice(0,20)));
+  //       } catch (sErr) {
+  //         // ignore
+  //       }
+  //     }
+  //   } catch (lsErr) {
+  //     // ignore storage errors
+  //   }
+  // }
 
   // Accept the navigation
   currentView.value = view;

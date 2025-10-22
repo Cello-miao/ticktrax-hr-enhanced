@@ -11,6 +11,7 @@ const fmtParis = new Intl.DateTimeFormat('fr-FR', {
   weekday: 'short'
 });
 
+// Convert a Date to its Paris year, month, day, weekday parts
 function toParisParts(date) {
   const parts = fmtParis.formatToParts(date);
   const get = (t) => parts.find(p => p.type === t)?.value;
@@ -27,14 +28,17 @@ function weekdayIndexMonday0(weekday) {
   return map[norm] ?? 0;
 }
 
+// Convert year, month, day to a comparable key: YYYYMMDD
 function toKey({ year, month, day }) {
   return (year * 10000) + (month * 100) + day;
 }
 
+// Get number of days in month m of year y
 function daysInMonth(y, m) {
   return new Date(y, m, 0).getDate(); // m: 1..12
 }
 
+// Get the Paris week start (Monday) for the week containing 'now'
 function getWeekStartParis(now) {
   const nowParts = toParisParts(now);
   const dow = weekdayIndexMonday0(nowParts.weekday);

@@ -1,6 +1,10 @@
 /**
  * CORDOVA MOBILE APP INTEGRATION
  * Complete integration for native mobile features
+ * 这个类就是 TickTrax 移动端与 Cordova 平台的“桥梁”
+ * 它封装了对 Cordova 设备就绪状态、地理位置、相机、网络状态、状态栏等功能的访问
+ * 并提供了一个事件系统来监听 Cordova 相关事件（如返回按钮、深度链接等）
+ * 它可以让你在 Web 和移动端共享逻辑，只在移动端调用 Cordova 特有的功能，而在浏览器端安全降级。
  */
 
 class CordovaIntegration {

@@ -130,13 +130,13 @@ onMounted(async () => {
     hoursThisMonth.value = `${agg.monthHours.toFixed(1)}h`;
     daysWorked.value = countDaysWorkedInMonthParis(entries);
     // Build recent notes from the latest entries (most recent first)
-    const withTs = entries.map((e) => ({ e, ts: mostRecentTs(e) }))
-      .filter(({ ts }) => Number.isFinite(ts));
-    withTs.sort((a, b) => b.ts - a.ts);
-    notes.value = withTs.slice(0, 3).map(({ e }, i) => ({
-      id: e.id || i + 1,
-      text: formatRecentEntry(e)
-    }));
+    // const withTs = entries.map((e) => ({ e, ts: mostRecentTs(e) }))
+    //   .filter(({ ts }) => Number.isFinite(ts));
+    // withTs.sort((a, b) => b.ts - a.ts);
+    // notes.value = withTs.slice(0, 3).map(({ e }, i) => ({
+    //   id: e.id || i + 1,
+    //   text: formatRecentEntry(e)
+    // }));
 
     // Compute hours per day for the current week (Mon–Sun)
     const hist = computeWeekHistogramParis(entries);

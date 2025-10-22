@@ -1,4 +1,8 @@
 // Cordova Service for native device features
+/**
+ * CordovaService 是 移动端特有功能的统一接口
+ * 相比 CordovaIntegration，它更轻量，面向 服务调用，适合在 Vue、React 等前端项目中直接注入和使用。
+ */
 class CordovaService {
   constructor() {
     this.isReady = false;

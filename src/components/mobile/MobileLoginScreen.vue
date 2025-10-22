@@ -75,7 +75,7 @@
           </Button>
 
           <!-- Biometric Login (placeholder - requires backend support) -->
-          <div v-if="biometricSupported" class="text-center">
+          <!-- <div v-if="biometricSupported" class="text-center">
             <div class="relative">
               <div class="absolute inset-0 flex items-center">
                 <span class="w-full border-t" />
@@ -92,7 +92,7 @@
               <Fingerprint class="mr-2 h-5 w-5" />
               Use Biometric Login
             </Button>
-          </div>
+          </div> -->
 
           <!-- Forgot Password -->
           <!-- <div class="text-center">
@@ -148,6 +148,7 @@ const networkStatus = ref("online");
 const biometricSupported = ref(false);
 
 // Check for biometric support
+// onMounted allows us to run code when the component is mounted
 onMounted(async () => {
   // Check if we're in a mobile environment with biometric capabilities
   if ('PublicKeyCredential' in window && 'authenticatorAttachment' in PublicKeyCredential.prototype) {

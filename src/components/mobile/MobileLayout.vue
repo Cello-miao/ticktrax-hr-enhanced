@@ -5,14 +5,14 @@
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
           <!-- Menu Toggle for Mobile -->
-          <Button 
+          <!-- <Button 
             variant="ghost" 
             size="sm" 
             @click="toggleSidebar" 
             class="md:hidden"
           >
             <Menu class="h-5 w-5" />
-          </Button>
+          </Button> -->
           
           <!-- App Logo -->
           <div class="flex items-center gap-2">
@@ -48,7 +48,7 @@
     </Button>
 
     <!-- Mobile Sidebar Overlay -->
-       <div
+       <!-- <div
       v-if="sidebarOpen"
       class="fixed inset-0 z-40 bg-black/50 md:hidden"
       role="button"
@@ -57,17 +57,17 @@
       @click="closeSidebar('overlay')"
       @pointerdown="closeSidebar('overlay')"
       @touchstart.prevent="closeSidebar('overlay')"
-    ></div>
+    ></div> -->
 
     <!-- Sidebar Panel -->
-    <aside
+    <!-- <aside
       v-if="sidebarOpen"
       :style="asideStyle"
       class="fixed left-0 top-0 bottom-0 z-50 w-72 bg-background md:hidden overflow-auto"
       @click.stop
-    >
+    > -->
       <!-- Sidebar Header -->
-      <div class="p-4 border-b">
+      <!-- <div class="p-4 border-b">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2">
             <component :is="currentConfig.icon" class="h-6 w-6 text-primary" />
@@ -77,10 +77,10 @@
             <X class="h-4 w-4" />
           </Button>
         </div>
-      </div>
+      </div> -->
       
       <!-- Navigation Menu -->
-      <ScrollArea class="flex-1 p-4">
+      <!-- <ScrollArea class="flex-1 p-4">
         <nav class="space-y-2">
           <Button
             v-for="item in currentConfig.menuItems"
@@ -93,10 +93,10 @@
             {{ item.label }}
           </Button>
         </nav>
-      </ScrollArea>
+      </ScrollArea> -->
       
       <!-- Sidebar Footer -->
-      <div class="p-4 border-t">
+      <!-- <div class="p-4 border-t">
         <div class="space-y-2">
           <div class="text-sm text-muted-foreground">
             Logged in as: {{ userName }}
@@ -111,7 +111,7 @@
           </Button>
         </div>
       </div>
-    </aside>
+    </aside> -->
 
     <!-- Main Content Area -->
     <main class="mobile-main flex-1 pb-16 md:pb-4">

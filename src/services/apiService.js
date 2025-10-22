@@ -29,6 +29,11 @@ class TicktraxApiService {
     };
     
     // 🔄 Request Interceptors
+    // 拦截器（Interceptor）就是在发送请求之前，对请求配置做一些统一修改和处理的函数，比如：
+    // 给所有请求统一加上认证 token（比如 Authorization 头）
+    // 给请求参数加上公共参数（比如语言、版本号）
+    // 统一处理请求日志
+    // 动态修改请求超时、headers 等配置
     this.requestInterceptors = [];
     this.responseInterceptors = [];
     
@@ -76,6 +81,7 @@ class TicktraxApiService {
    * @param {any} data - Data to cache
    * @param {number} ttl - Time to live in milliseconds
    */
+  // key：缓存的唯一标识（通常是请求的 URL + 参数组成的字符串）
   setCache(key, data, ttl = this.cacheTimeout) {
     this.cache.set(key, {
       data,
@@ -127,7 +133,7 @@ class TicktraxApiService {
    */
   generateCacheKey(endpoint, params = {}) {
     const sortedParams = Object.keys(params)
-      .sort()
+      .sort() //参数名进行排序，保证参数顺序固定
       .map(key => `${key}=${params[key]}`)
       .join('&');
     return `${endpoint}${sortedParams ? `?${sortedParams}` : ''}`;
@@ -266,9 +272,13 @@ class TicktraxApiService {
   
   async request(endpoint, options = {}) {
     const startTime = Date.now();
+    //根据请求地址和参数生成一个唯一的“键”，用来做请求去重和缓存。
+    //举例：/api/user?id=123 → 生成一个 key 比如 GET:/api/user?id=123
     const requestKey = this.generateCacheKey(endpoint, options.params);
     
     // Check for pending request (deduplication)
+    //如果同一个 GET 请求已经在发送中，就不再重复发送，而是复用之前的 Promise。
+    //这可避免列表页、搜索页连续点击触发重复请求。
     const pendingRequest = this.getPendingRequest(requestKey);
     if (pendingRequest && options.method === 'GET') {
       console.log(`[API] Deduplicating request: ${endpoint}`);
@@ -527,7 +537,7 @@ class TicktraxApiService {
       body: JSON.stringify(payload)
     });
     
-    const token = result?.data?.token || result?.meta?.token;
+    const token = result?.data?.token || result?.meta?.token; // JWT in data or meta
     const csrf = result?.data?.csrf_token || result?.meta?.csrf_token;
     if (token) this.setTokens(token, csrf);
     
@@ -540,7 +550,7 @@ class TicktraxApiService {
       body: JSON.stringify(credentials)
     });
     
-    const token = result?.data?.token || result?.meta?.token;
+    const token = result?.data?.token || result?.meta?.token; // JWT in data or meta
     const csrf = result?.data?.csrf_token || result?.meta?.csrf_token;
     if (token) this.setTokens(token, csrf);
     
