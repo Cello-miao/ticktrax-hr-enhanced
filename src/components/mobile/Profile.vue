@@ -54,34 +54,14 @@
             <div class="font-medium">{{ profile?.email || '—' }}</div>
           </div>
 
-          <!-- <div>
-            <div class="text-sm text-muted-foreground">Username</div>
-            <div class="font-medium">{{ profile?.username || '—' }}</div>
-          </div> -->
-
-          <!-- <div>
-            <div class="text-sm text-muted-foreground">Role</div>
-            <div class="font-medium">{{ roleLabel }}</div>
-          </div> -->
-
           <div v-if="profile?.phone">
             <div class="text-sm text-muted-foreground">Phone</div>
             <div class="font-medium">{{ profile.phone }}</div>
           </div>
 
-          <div v-if="profile?.department">
-            <div class="text-sm text-muted-foreground">Department</div>
-            <div class="font-medium">{{ profile.department }}</div>
-          </div>
-
           <div v-if="profile?.employee_id">
             <div class="text-sm text-muted-foreground">Employee ID</div>
             <div class="font-medium">{{ profile.employee_id }}</div>
-          </div>
-
-          <div v-if="profile?.hire_date">
-            <div class="text-sm text-muted-foreground">Hire Date</div>
-            <div class="font-medium">{{ formatDate(profile.hire_date) }}</div>
           </div>
         </div>
 

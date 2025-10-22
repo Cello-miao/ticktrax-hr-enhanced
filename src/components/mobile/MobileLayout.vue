@@ -164,8 +164,8 @@ const sidebarOpen = ref(false);
 // Shared admin-like menu for admin/HR
 const adminMenuItems = [
   //{ icon: Home, label: "Dashboard", id: "dashboard", shortLabel: "Home" },
-  { icon: Users, label: "Employee Management", id: "employees", shortLabel: "Staff" },
-  { icon: TrendingUp, label: "Analytics", id: "analytics", shortLabel: "Analytics" }
+  { icon: Users, label: "Employee Management", id: "employees", shortLabel: "Staff" }
+  //{ icon: TrendingUp, label: "Analytics", id: "analytics", shortLabel: "Analytics" }
 ];
 
 const roleConfig = {
